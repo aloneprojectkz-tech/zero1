@@ -1,0 +1,2038 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>ZERØ1 — Ultimate Bass Station</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Bebas+Neue&family=DM+Sans:wght@300;400;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --green: #74fd62;
+    --lime: #b9f549;
+    --bg: #050505;
+    --card: #0c0c0c;
+    --border: #1f1f1f;
+    --dim: #333;
+    --muted: #555;
+    --text: #ccc;
+    --glow-green: rgba(116,253,98,0.18);
+    --touch-target: 48px;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--green);
+    font-family: 'DM Sans', sans-serif;
+    min-height: 100vh;
+    overflow-x: hidden;
+    cursor: crosshair;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(116,253,98,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(116,253,98,0.03) 1px, transparent 1px);
+    background-size: 40px 40px;
+    animation: gridDrift 20s linear infinite;
+    pointer-events: none;
+    z-index: 0;
+  }
+  @keyframes gridDrift {
+    0% { background-position: 0 0; }
+    100% { background-position: 40px 40px; }
+  }
+
+  body::after {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.06) 2px, rgba(0,0,0,0.06) 4px);
+    pointer-events: none;
+    z-index: 999;
+  }
+
+  /* ─── APP LAYOUT ─── */
+  .app {
+    position: relative;
+    z-index: 1;
+    display: grid;
+    grid-template-columns: 180px 1fr;
+    grid-template-rows: auto 1fr auto;
+    min-height: 100vh;
+  }
+
+  /* ─── HEADER ─── */
+  header {
+    grid-column: 1 / -1;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 24px;
+    border-bottom: 1px solid var(--border);
+    background: rgba(5,5,5,0.97);
+    backdrop-filter: blur(10px);
+    position: sticky;
+    top: 0;
+    z-index: 200;
+    gap: 12px;
+  }
+
+  .logo {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: clamp(22px, 5vw, 32px);
+    letter-spacing: 6px;
+    color: var(--green);
+    text-shadow: 0 0 30px var(--green), 0 0 60px rgba(116,253,98,0.4);
+    animation: logoPulse 3s ease-in-out infinite;
+    white-space: nowrap;
+  }
+  @keyframes logoPulse {
+    0%, 100% { text-shadow: 0 0 20px var(--green), 0 0 40px rgba(116,253,98,0.3); }
+    50% { text-shadow: 0 0 40px var(--green), 0 0 80px rgba(116,253,98,0.6), 0 0 120px rgba(116,253,98,0.2); }
+  }
+  .logo span { color: var(--lime); }
+  .logo .sub { font-size: clamp(10px, 2.5vw, 16px); letter-spacing: 4px; color: var(--muted); }
+
+  .header-right {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+
+  .header-status {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-family: 'Space Mono', monospace;
+    font-size: 9px;
+    color: var(--muted);
+    letter-spacing: 2px;
+  }
+
+  .status-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: var(--dim);
+    transition: 0.3s;
+    flex-shrink: 0;
+  }
+  .status-dot.active {
+    background: var(--green);
+    box-shadow: 0 0 12px var(--green);
+    animation: blink 1.4s ease-in-out infinite;
+  }
+  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.4} }
+
+  .author-tag {
+    font-family: 'Space Mono', monospace;
+    font-size: 9px;
+    color: var(--muted);
+    letter-spacing: 1px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    white-space: nowrap;
+  }
+  .author-tag a {
+    color: var(--lime);
+    text-decoration: none;
+    transition: 0.2s;
+  }
+  .author-tag a:hover { color: var(--green); text-shadow: 0 0 10px var(--green); }
+
+  /* ─── SIDEBAR ─── */
+  .sidebar {
+    border-right: 1px solid var(--border);
+    background: var(--card);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 20px 12px;
+    gap: 16px;
+    position: relative;
+    overflow: hidden;
+  }
+  .sidebar::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(180deg, rgba(116,253,98,0.03) 0%, transparent 50%, rgba(185,245,73,0.03) 100%);
+    pointer-events: none;
+  }
+
+  .viz-label {
+    font-family: 'Space Mono', monospace;
+    font-size: 9px;
+    letter-spacing: 3px;
+    color: var(--lime);
+    text-transform: uppercase;
+  }
+
+  #canvas {
+    width: 140px;
+    height: 320px;
+    background: #000;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    box-shadow: inset 0 0 20px rgba(0,0,0,0.8);
+  }
+
+  #levelMeter {
+    width: 12px; height: 200px;
+    background: var(--border);
+    border-radius: 6px;
+    overflow: hidden;
+    position: relative;
+  }
+  #levelFill {
+    position: absolute;
+    bottom: 0; left: 0; right: 0;
+    background: linear-gradient(0deg, var(--green), var(--lime), #fff);
+    border-radius: 6px;
+    transition: height 0.05s;
+    box-shadow: 0 0 10px var(--green);
+  }
+
+  .vu-ticks {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    font-family: 'Space Mono', monospace;
+    font-size: 7px;
+    color: var(--dim);
+    align-items: flex-end;
+  }
+
+  .sidebar-meters { display: flex; gap: 6px; align-items: flex-start; }
+
+  /* ─── MAIN ─── */
+  .main {
+    padding: 20px 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    overflow-y: auto;
+    min-width: 0;
+  }
+
+  /* ─── DROP ZONE ─── */
+  .drop-zone {
+    border: 2px dashed var(--border);
+    border-radius: 10px;
+    padding: 16px 20px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    cursor: pointer;
+    transition: 0.25s;
+    background: rgba(116,253,98,0.02);
+    position: relative;
+    overflow: hidden;
+    min-height: var(--touch-target);
+  }
+  .drop-zone::before {
+    content: '';
+    position: absolute; inset: 0;
+    background: linear-gradient(90deg, transparent, rgba(116,253,98,0.05), transparent);
+    transform: translateX(-100%);
+    transition: 0.4s;
+  }
+  .drop-zone:hover::before { transform: translateX(100%); }
+  .drop-zone:hover { border-color: var(--green); background: rgba(116,253,98,0.05); }
+  .drop-zone.loaded { border-color: var(--lime); border-style: solid; }
+
+  .drop-icon { flex-shrink: 0; color: var(--green); opacity: 0.7; }
+  .drop-text { flex: 1; min-width: 0; }
+  .drop-text strong { display: block; font-size: 12px; font-weight: 600; color: var(--green); letter-spacing: 1px; }
+  .drop-text span { font-size: 10px; color: var(--muted); font-family: 'Space Mono', monospace; }
+  #u { display: none; }
+  #fileName {
+    font-family: 'Space Mono', monospace;
+    font-size: 9px;
+    color: var(--lime);
+    letter-spacing: 1px;
+    max-width: 140px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /* ─── TRANSPORT ─── */
+  .transport {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px 20px;
+  }
+
+  .seek-wrap { position: relative; margin-bottom: 10px; }
+
+  input[type="range"] {
+    -webkit-appearance: none;
+    width: 100%;
+    height: 4px;
+    background: var(--border);
+    border-radius: 2px;
+    cursor: pointer;
+    outline: none;
+  }
+  input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 18px; height: 18px;
+    border-radius: 50%;
+    background: var(--green);
+    box-shadow: 0 0 10px var(--green);
+    cursor: pointer;
+    transition: 0.15s;
+  }
+  input[type="range"]::-webkit-slider-thumb:hover,
+  input[type="range"]::-webkit-slider-thumb:active {
+    transform: scale(1.3);
+    background: var(--lime);
+    box-shadow: 0 0 16px var(--lime);
+  }
+
+  .time-bar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-family: 'Space Mono', monospace;
+    font-size: 10px;
+    color: var(--muted);
+    margin-top: 6px;
+  }
+  #seekPerc { color: var(--lime); font-weight: 700; font-size: 11px; }
+
+  .transport-btns {
+    display: flex;
+    gap: 10px;
+    margin-top: 14px;
+    flex-wrap: wrap;
+  }
+
+  .btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 12px 18px;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--text);
+    font-family: 'Space Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: 0.2s;
+    position: relative;
+    overflow: hidden;
+    min-height: var(--touch-target);
+    white-space: nowrap;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .btn::before {
+    content: '';
+    position: absolute; inset: 0;
+    background: var(--green);
+    transform: scaleX(0);
+    transform-origin: left;
+    transition: 0.25s ease;
+    z-index: 0;
+  }
+  .btn:hover::before, .btn:active::before { transform: scaleX(1); }
+  .btn:hover, .btn:active { color: #000; border-color: var(--green); }
+  .btn span, .btn svg { position: relative; z-index: 1; }
+
+  .btn-play { border-color: var(--green); color: var(--green); flex: 1; }
+  .btn-play.playing { border-color: var(--lime); color: var(--lime); }
+  .btn-play.playing::before { background: var(--lime); }
+
+  .btn-dl { border-color: var(--dim); }
+  .btn-dl:disabled { opacity: 0.3; cursor: not-allowed; }
+  .btn-dl:disabled::before { display: none; }
+
+  /* ─── EFFECTS GRID ─── */
+  .section-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-family: 'Space Mono', monospace;
+    font-size: 9px;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    color: var(--muted);
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 8px;
+  }
+  .section-title svg { color: var(--lime); }
+
+  .effects-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+  }
+
+  .fx-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 16px;
+    transition: 0.2s;
+    position: relative;
+    overflow: hidden;
+  }
+  .fx-card::after {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, var(--green), var(--lime));
+    transform: scaleX(0);
+    transform-origin: left;
+    transition: 0.3s;
+  }
+  .fx-card:hover::after { transform: scaleX(1); }
+  .fx-card.fx-active { border-color: var(--green); }
+  .fx-card.fx-active::after { transform: scaleX(1); }
+
+  .fx-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 12px;
+  }
+
+  .fx-title-wrap { display: flex; align-items: center; gap: 8px; }
+
+  .fx-icon {
+    width: 30px; height: 30px;
+    border-radius: 6px;
+    background: rgba(116,253,98,0.08);
+    border: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    color: var(--muted);
+  }
+  .fx-active .fx-icon {
+    background: rgba(116,253,98,0.15);
+    border-color: var(--green);
+    box-shadow: 0 0 12px rgba(116,253,98,0.2);
+    color: var(--green);
+  }
+
+  .fx-name {
+    font-family: 'Space Mono', monospace;
+    font-size: 9px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--text);
+    font-weight: 700;
+  }
+  .fx-active .fx-name { color: var(--green); }
+
+  .fx-sub {
+    font-size: 8px;
+    color: var(--muted);
+    font-family: 'Space Mono', monospace;
+    letter-spacing: 1px;
+    margin-top: 1px;
+  }
+
+  .toggle {
+    position: relative;
+    width: 36px; height: 20px;
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+  .toggle input { display: none; }
+  .toggle-track {
+    position: absolute; inset: 0;
+    background: var(--border);
+    border-radius: 10px;
+    transition: 0.25s;
+  }
+  .toggle input:checked ~ .toggle-track { background: var(--green); box-shadow: 0 0 10px var(--green); }
+  .toggle-thumb {
+    position: absolute;
+    top: 3px; left: 3px;
+    width: 14px; height: 14px;
+    background: #000;
+    border-radius: 50%;
+    transition: 0.25s;
+  }
+  .toggle input:checked ~ .toggle-thumb { left: 19px; }
+
+  .fx-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+  }
+  .fx-row:last-child { margin-bottom: 0; }
+  .fx-row-label {
+    font-size: 8px;
+    font-family: 'Space Mono', monospace;
+    color: var(--muted);
+    letter-spacing: 1px;
+    min-width: 44px;
+    text-transform: uppercase;
+  }
+  .fx-val {
+    font-size: 10px;
+    font-family: 'Space Mono', monospace;
+    color: var(--lime);
+    min-width: 32px;
+    text-align: right;
+    font-weight: 700;
+  }
+
+  input.fx-slider {
+    height: 4px;
+    accent-color: var(--lime);
+    flex: 1;
+    min-width: 0;
+  }
+  input.fx-slider::-webkit-slider-thumb {
+    width: 14px; height: 14px;
+    box-shadow: 0 0 6px var(--lime);
+    background: var(--lime);
+  }
+
+  .fx-card.wide { grid-column: 1 / -1; }
+
+  .comp-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 8px;
+  }
+
+  /* Sidechain pumping animation */
+  @keyframes scPump {
+    0% { box-shadow: 0 0 0 rgba(116,253,98,0); }
+    20% { box-shadow: 0 0 30px rgba(116,253,98,0.5), inset 0 0 20px rgba(116,253,98,0.1); }
+    100% { box-shadow: 0 0 0 rgba(116,253,98,0); }
+  }
+  .fx-card.sidechain-pump { animation: scPump 0.5s ease-out; }
+
+  /* ─── WAVEFORM ─── */
+  #waveCanvas {
+    width: 100%;
+    height: 50px;
+    border-radius: 6px;
+    background: #000;
+  }
+
+  /* ─── FOOTER ─── */
+  footer {
+    grid-column: 1 / -1;
+    padding: 12px 24px;
+    border-top: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 8px;
+    font-family: 'Space Mono', monospace;
+    font-size: 8px;
+    letter-spacing: 2px;
+    color: var(--dim);
+  }
+  footer .footer-author {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--muted);
+  }
+  footer a { color: var(--lime); text-decoration: none; }
+  footer a:hover { color: var(--green); }
+
+  /* ─── PULSE RING ─── */
+  @keyframes pulseRing {
+    0% { transform: scale(1); opacity: 0.8; }
+    100% { transform: scale(2.2); opacity: 0; }
+  }
+  .pulse-ring {
+    position: absolute;
+    width: 100%; height: 100%;
+    border-radius: 6px;
+    border: 2px solid var(--lime);
+    animation: pulseRing 1.2s ease-out infinite;
+    pointer-events: none;
+  }
+
+  /* ─── SCROLLBAR ─── */
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-track { background: #000; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--green); }
+
+  /* ─── RENDER BAR ─── */
+  #renderBar {
+    display: none;
+    height: 3px;
+    background: var(--border);
+    border-radius: 2px;
+    overflow: hidden;
+    margin-top: 8px;
+  }
+  #renderFill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--green), var(--lime));
+    width: 0%;
+    transition: width 0.1s;
+    box-shadow: 0 0 10px var(--green);
+  }
+  @keyframes shimmer {
+    0% { background-position: -200% center; }
+    100% { background-position: 200% center; }
+  }
+  .rendering #renderFill {
+    background: linear-gradient(90deg, var(--green) 0%, var(--lime) 50%, var(--green) 100%);
+    background-size: 200%;
+    animation: shimmer 1s linear infinite;
+    width: 100% !important;
+  }
+
+  /* ════════════════════════════════════════
+     EXPORT MODAL
+  ════════════════════════════════════════ */
+  .modal-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.85);
+    backdrop-filter: blur(8px);
+    z-index: 1000;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+  }
+  .modal-overlay.open { display: flex; }
+
+  .modal {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 28px;
+    width: 100%;
+    max-width: 520px;
+    position: relative;
+    max-height: 90vh;
+    overflow-y: auto;
+  }
+  .modal::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 3px;
+    background: linear-gradient(90deg, var(--green), var(--lime));
+    border-radius: 14px 14px 0 0;
+  }
+
+  .modal-title {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 24px;
+    letter-spacing: 4px;
+    color: var(--green);
+    margin-bottom: 6px;
+    text-shadow: 0 0 20px rgba(116,253,98,0.4);
+  }
+  .modal-sub {
+    font-family: 'Space Mono', monospace;
+    font-size: 9px;
+    color: var(--muted);
+    letter-spacing: 2px;
+    margin-bottom: 24px;
+  }
+
+  .modal-close {
+    position: absolute;
+    top: 16px; right: 16px;
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--muted);
+    width: 32px; height: 32px;
+    border-radius: 6px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: 0.2s;
+  }
+  .modal-close:hover { border-color: var(--green); color: var(--green); }
+
+  .modal-cover-row {
+    display: flex;
+    gap: 16px;
+    margin-bottom: 20px;
+    align-items: flex-start;
+  }
+
+  .cover-drop {
+    width: 96px; height: 96px;
+    border: 2px dashed var(--border);
+    border-radius: 8px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    cursor: pointer;
+    transition: 0.2s;
+    flex-shrink: 0;
+    overflow: hidden;
+    position: relative;
+    background: rgba(116,253,98,0.02);
+  }
+  .cover-drop:hover { border-color: var(--green); }
+  .cover-drop img {
+    position: absolute;
+    inset: 0;
+    width: 100%; height: 100%;
+    object-fit: cover;
+  }
+  .cover-drop-hint {
+    font-family: 'Space Mono', monospace;
+    font-size: 7px;
+    color: var(--muted);
+    letter-spacing: 1px;
+    text-align: center;
+    line-height: 1.4;
+  }
+  .cover-drop svg { color: var(--dim); }
+
+  .modal-fields { flex: 1; display: flex; flex-direction: column; gap: 10px; }
+
+  .field-group { display: flex; flex-direction: column; gap: 4px; }
+  .field-label {
+    font-family: 'Space Mono', monospace;
+    font-size: 8px;
+    letter-spacing: 2px;
+    color: var(--muted);
+    text-transform: uppercase;
+  }
+  .field-input {
+    background: #0a0a0a;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 8px 12px;
+    color: var(--text);
+    font-family: 'DM Sans', sans-serif;
+    font-size: 13px;
+    outline: none;
+    transition: 0.2s;
+    width: 100%;
+  }
+  .field-input:focus { border-color: var(--green); box-shadow: 0 0 0 2px rgba(116,253,98,0.1); }
+  .field-input::placeholder { color: var(--dim); }
+
+  .modal-extra-fields {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    margin-top: 4px;
+  }
+
+  .modal-format-row {
+    display: flex;
+    gap: 8px;
+    margin-top: 4px;
+    flex-wrap: wrap;
+  }
+  .format-btn {
+    flex: 1;
+    min-width: 80px;
+    padding: 10px 14px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: transparent;
+    color: var(--muted);
+    font-family: 'Space Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 2px;
+    cursor: pointer;
+    transition: 0.2s;
+    text-align: center;
+  }
+  .format-btn.selected { border-color: var(--green); color: var(--green); background: rgba(116,253,98,0.07); }
+  .format-btn:hover { border-color: var(--dim); color: var(--text); }
+
+  .modal-actions {
+    display: flex;
+    gap: 10px;
+    margin-top: 20px;
+  }
+  .btn-modal-cancel {
+    flex: 0 0 auto;
+    padding: 13px 20px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: transparent;
+    color: var(--muted);
+    font-family: 'Space Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 2px;
+    cursor: pointer;
+    transition: 0.2s;
+    min-height: var(--touch-target);
+  }
+  .btn-modal-cancel:hover { border-color: var(--dim); color: var(--text); }
+
+  .btn-modal-export {
+    flex: 1;
+    padding: 13px 24px;
+    border: 1px solid var(--green);
+    border-radius: 6px;
+    background: rgba(116,253,98,0.08);
+    color: var(--green);
+    font-family: 'Space Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 3px;
+    cursor: pointer;
+    transition: 0.2s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    min-height: var(--touch-target);
+  }
+  .btn-modal-export:hover { background: var(--green); color: #000; }
+  .btn-modal-export:disabled { opacity: 0.4; cursor: not-allowed; }
+  .btn-modal-export:disabled:hover { background: rgba(116,253,98,0.08); color: var(--green); }
+
+  /* ════════════════════════════════════════
+     MOBILE RESPONSIVE
+  ════════════════════════════════════════ */
+
+  /* Tablet: 768px - 1024px */
+  @media (max-width: 1024px) {
+    .app {
+      grid-template-columns: 140px 1fr;
+    }
+    #canvas { width: 100px; }
+    .main { padding: 16px 18px; }
+    .effects-grid { grid-template-columns: 1fr 1fr; gap: 10px; }
+    .comp-grid { grid-template-columns: 1fr 1fr; }
+  }
+
+  /* Mobile landscape & small tablet */
+  @media (max-width: 768px) {
+    .app {
+      grid-template-columns: 1fr;
+      grid-template-rows: auto auto 1fr auto;
+    }
+
+    header {
+      padding: 12px 16px;
+    }
+
+    .logo { font-size: 22px; letter-spacing: 4px; }
+    .logo .sub { display: none; }
+
+    .header-status { display: none; }
+
+    .author-tag {
+      font-size: 8px;
+    }
+
+    .sidebar {
+      border-right: none;
+      border-bottom: 1px solid var(--border);
+      flex-direction: row;
+      flex-wrap: nowrap;
+      padding: 12px 16px;
+      gap: 14px;
+      overflow-x: auto;
+      overflow-y: hidden;
+      align-items: center;
+      justify-content: flex-start;
+    }
+
+    .sidebar::before { display: none; }
+
+    .viz-label {
+      writing-mode: vertical-rl;
+      font-size: 8px;
+      letter-spacing: 2px;
+      flex-shrink: 0;
+    }
+
+    #canvas {
+      width: 60px;
+      height: 80px;
+      flex-shrink: 0;
+    }
+
+    .sidebar-meters {
+      flex-direction: row;
+      gap: 4px;
+      align-items: flex-end;
+    }
+
+    #levelMeter {
+      width: 80px; height: 10px;
+    }
+
+    #levelFill {
+      background: linear-gradient(90deg, var(--green), var(--lime), #fff);
+      top: 0; bottom: 0; left: 0;
+      right: auto;
+      width: 0%;
+      height: 100% !important;
+    }
+
+    .vu-ticks {
+      flex-direction: row;
+      gap: 8px;
+      font-size: 7px;
+      align-items: center;
+    }
+
+    .main { padding: 14px 14px; gap: 12px; }
+
+    .drop-zone { padding: 12px 14px; }
+
+    .effects-grid {
+      grid-template-columns: 1fr;
+      gap: 10px;
+    }
+
+    .fx-card.wide { grid-column: 1; }
+
+    .comp-grid {
+      grid-template-columns: 1fr 1fr;
+    }
+
+    .transport-btns { gap: 8px; }
+    .btn { padding: 14px 16px; font-size: 9px; }
+
+    footer {
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 6px;
+      padding: 12px 16px;
+    }
+
+    .modal { padding: 20px; }
+    .modal-cover-row { flex-direction: column; align-items: center; }
+    .modal-extra-fields { grid-template-columns: 1fr; }
+  }
+
+  /* Mobile portrait: small phones */
+  @media (max-width: 480px) {
+    header { padding: 10px 12px; gap: 8px; }
+    .logo { font-size: 20px; letter-spacing: 3px; }
+
+    .main { padding: 10px 10px; gap: 10px; }
+
+    .drop-zone { padding: 10px 12px; gap: 10px; }
+    .drop-text strong { font-size: 11px; }
+    #fileName { max-width: 100px; }
+
+    .fx-card { padding: 12px 12px; }
+    .fx-name { font-size: 8px; }
+    .fx-sub { font-size: 7px; }
+
+    .fx-row-label { min-width: 36px; font-size: 7px; }
+    .fx-val { font-size: 9px; min-width: 28px; }
+
+    .comp-grid { grid-template-columns: 1fr; }
+
+    .transport { padding: 12px 14px; }
+    .btn { padding: 13px 12px; font-size: 9px; letter-spacing: 1px; }
+
+    input[type="range"]::-webkit-slider-thumb { width: 22px; height: 22px; }
+    input.fx-slider::-webkit-slider-thumb { width: 18px; height: 18px; }
+
+    .modal-format-row { gap: 6px; }
+    .format-btn { font-size: 9px; padding: 9px 10px; }
+  }
+
+  /* Very small phones */
+  @media (max-width: 360px) {
+    .logo { font-size: 18px; letter-spacing: 2px; }
+    .header-right { gap: 8px; }
+    .author-tag { font-size: 7px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="app">
+
+  <!-- HEADER -->
+  <header>
+    <div class="logo">ZER<span>Ø</span>1 <span class="sub">BASS STATION</span></div>
+    <div class="header-right">
+      <div class="author-tag">
+        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+        <a href="https://t.me/AloneAbove" target="_blank" rel="noopener">@AloneAbove</a>
+      </div>
+      <div class="header-status">
+        <div class="status-dot" id="statusDot"></div>
+        <span id="statusText">OFFLINE</span>
+        <span>·</span>
+        <span>v3.0</span>
+        <span>·</span>
+        <span id="sampleRate">— Hz</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- SIDEBAR -->
+  <aside class="sidebar">
+    <div class="viz-label">Spectrum</div>
+    <canvas id="canvas" width="140" height="320"></canvas>
+    <div class="sidebar-meters">
+      <div id="levelMeter"><div id="levelFill" style="height:0%"></div></div>
+      <div class="vu-ticks">
+        <div>0</div><div style="margin-top:16px">−6</div>
+        <div style="margin-top:16px">−12</div><div style="margin-top:16px">−18</div>
+        <div style="margin-top:16px">−24</div><div style="margin-top:20px">∞</div>
+      </div>
+    </div>
+    <div class="viz-label" style="color:var(--muted)">VU</div>
+  </aside>
+
+  <!-- MAIN -->
+  <main class="main">
+
+    <!-- FILE UPLOAD -->
+    <div class="drop-zone" id="dropZone" onclick="document.getElementById('u').click()">
+      <div class="drop-icon">
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>
+        </svg>
+      </div>
+      <div class="drop-text">
+        <strong>ЗАГРУЗИ ТРЕК</strong>
+        <span>MP3 · WAV · FLAC · OGG · AAC</span>
+      </div>
+      <div id="fileName">НЕТ ФАЙЛА</div>
+      <input type="file" id="u" accept="audio/*">
+    </div>
+
+    <!-- TRANSPORT -->
+    <div class="transport">
+      <canvas id="waveCanvas"></canvas>
+      <div class="seek-wrap" style="margin-top:10px">
+        <input type="range" id="seekbar" value="0" min="0" step="0.01">
+      </div>
+      <div class="time-bar">
+        <span id="curTime">0:00</span>
+        <span id="seekPerc">0%</span>
+        <span id="durTime">0:00</span>
+      </div>
+      <div id="renderBar"><div id="renderFill"></div></div>
+      <div class="transport-btns">
+        <button class="btn btn-play" id="p" onclick="togglePlay()">
+          <svg id="playIcon" width="14" height="14" viewBox="0 0 12 12" fill="currentColor"><polygon points="2,1 11,6 2,11"/></svg>
+          <span id="playLabel">PLAY</span>
+          <div class="pulse-ring" id="pulseRing" style="display:none"></div>
+        </button>
+        <button class="btn btn-dl" id="d" onclick="openExportModal()">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+          </svg>
+          <span id="dlLabel">EXPORT</span>
+        </button>
+      </div>
+    </div>
+
+    <div class="section-title">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+      ЦЕПОЧКА ЭФФЕКТОВ
+    </div>
+
+    <!-- EFFECTS GRID -->
+    <div class="effects-grid">
+
+      <!-- BASS BOOST -->
+      <div class="fx-card fx-active" id="card-bass">
+        <div class="fx-header">
+          <div class="fx-title-wrap">
+            <div class="fx-icon">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg>
+            </div>
+            <div>
+              <div class="fx-name">Bass Power</div>
+              <div class="fx-sub">Low-shelf · 150Hz</div>
+            </div>
+          </div>
+          <label class="toggle"><input type="checkbox" id="tog-bass" checked onchange="toggleFX('bass')"><div class="toggle-track"></div><div class="toggle-thumb"></div></label>
+        </div>
+        <div class="fx-row">
+          <div class="fx-row-label">Gain</div>
+          <input type="range" class="fx-slider" id="bass" min="0" max="25" step="1" value="0" oninput="updateBass(this)">
+          <div class="fx-val" id="bassVal">0dB</div>
+        </div>
+      </div>
+
+      <!-- LOW-PASS FILTER -->
+      <div class="fx-card fx-active" id="card-filter">
+        <div class="fx-header">
+          <div class="fx-title-wrap">
+            <div class="fx-icon">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
+            </div>
+            <div>
+              <div class="fx-name">Low-Pass</div>
+              <div class="fx-sub">Butterworth filter</div>
+            </div>
+          </div>
+          <label class="toggle"><input type="checkbox" id="tog-filter" checked onchange="toggleFX('filter')"><div class="toggle-track"></div><div class="toggle-thumb"></div></label>
+        </div>
+        <div class="fx-row">
+          <div class="fx-row-label">Cutoff</div>
+          <input type="range" class="fx-slider" id="f" min="400" max="20000" value="8000" oninput="updateFilter(this)">
+          <div class="fx-val" id="filterVal">8kHz</div>
+        </div>
+      </div>
+
+      <!-- DISTORTION -->
+      <div class="fx-card" id="card-dist">
+        <div class="fx-header">
+          <div class="fx-title-wrap">
+            <div class="fx-icon">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="13 2 13 9 20 9"/><path d="M13 2L4 13h7l-2 9 11-13h-7l2-7z"/></svg>
+            </div>
+            <div>
+              <div class="fx-name">Distortion</div>
+              <div class="fx-sub">WaveShaper · Overdrive</div>
+            </div>
+          </div>
+          <label class="toggle"><input type="checkbox" id="tog-dist" onchange="toggleFX('dist')"><div class="toggle-track"></div><div class="toggle-thumb"></div></label>
+        </div>
+        <div class="fx-row">
+          <div class="fx-row-label">Drive</div>
+          <input type="range" class="fx-slider" id="distDrive" min="0" max="400" value="100" oninput="updateDist(this)">
+          <div class="fx-val" id="distVal">100</div>
+        </div>
+        <div class="fx-row">
+          <div class="fx-row-label">Curve</div>
+          <input type="range" class="fx-slider" id="distCurve" min="0" max="2" step="1" value="0" oninput="updateDistCurve(this)">
+          <div class="fx-val" id="distCurveVal">SOFT</div>
+        </div>
+      </div>
+
+      <!-- REVERB -->
+      <div class="fx-card" id="card-reverb">
+        <div class="fx-header">
+          <div class="fx-title-wrap">
+            <div class="fx-icon">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 2v6h6M21.5 22v-6h-6"/><path d="M22 11.5A10 10 0 0 0 3.2 7.2M2 12.5a10 10 0 0 0 18.8 4.2"/></svg>
+            </div>
+            <div>
+              <div class="fx-name">Reverb</div>
+              <div class="fx-sub">Feedback delay · Space</div>
+            </div>
+          </div>
+          <label class="toggle"><input type="checkbox" id="tog-reverb" onchange="toggleFX('reverb')"><div class="toggle-track"></div><div class="toggle-thumb"></div></label>
+        </div>
+        <div class="fx-row">
+          <div class="fx-row-label">Size</div>
+          <input type="range" class="fx-slider" id="reverbSize" min="0.1" max="2.5" step="0.05" value="1.2" oninput="updateReverb('size',this)">
+          <div class="fx-val" id="reverbSizeVal">1.2s</div>
+        </div>
+        <div class="fx-row">
+          <div class="fx-row-label">Mix</div>
+          <input type="range" class="fx-slider" id="reverbMix" min="0" max="1" step="0.01" value="0.35" oninput="updateReverb('mix',this)">
+          <div class="fx-val" id="reverbMixVal">35%</div>
+        </div>
+      </div>
+
+      <!-- STEREO WIDENER -->
+      <div class="fx-card" id="card-stereo">
+        <div class="fx-header">
+          <div class="fx-title-wrap">
+            <div class="fx-icon">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 9l-3 3 3 3M9 5l3-3 3 3M15 19l-3 3-3-3M19 9l3 3-3 3"/><line x1="2" y1="12" x2="22" y2="12"/></svg>
+            </div>
+            <div>
+              <div class="fx-name">Stereo Width</div>
+              <div class="fx-sub">Haas effect · Mid/Side</div>
+            </div>
+          </div>
+          <label class="toggle"><input type="checkbox" id="tog-stereo" onchange="toggleFX('stereo')"><div class="toggle-track"></div><div class="toggle-thumb"></div></label>
+        </div>
+        <div class="fx-row">
+          <div class="fx-row-label">Width</div>
+          <input type="range" class="fx-slider" id="stereoWidth" min="0" max="50" step="1" value="20" oninput="updateStereo(this)">
+          <div class="fx-val" id="stereoVal">20ms</div>
+        </div>
+      </div>
+
+      <!-- BITCRUSHER -->
+      <div class="fx-card" id="card-bit">
+        <div class="fx-header">
+          <div class="fx-title-wrap">
+            <div class="fx-icon">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+            </div>
+            <div>
+              <div class="fx-name">Bitcrusher</div>
+              <div class="fx-sub">Lo-Fi · Bit reduction</div>
+            </div>
+          </div>
+          <label class="toggle"><input type="checkbox" id="tog-bit" onchange="toggleFX('bit')"><div class="toggle-track"></div><div class="toggle-thumb"></div></label>
+        </div>
+        <div class="fx-row">
+          <div class="fx-row-label">Bits</div>
+          <input type="range" class="fx-slider" id="bitDepth" min="2" max="16" step="1" value="8" oninput="updateBit('depth',this)">
+          <div class="fx-val" id="bitDepthVal">8bit</div>
+        </div>
+        <div class="fx-row">
+          <div class="fx-row-label">Reduce</div>
+          <input type="range" class="fx-slider" id="bitReduce" min="1" max="16" step="1" value="1" oninput="updateBit('reduce',this)">
+          <div class="fx-val" id="bitReduceVal">1x</div>
+        </div>
+      </div>
+
+      <!-- COMPRESSOR (full width) -->
+      <div class="fx-card wide fx-active" id="card-comp">
+        <div class="fx-header">
+          <div class="fx-title-wrap">
+            <div class="fx-icon">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="2"/><path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"/></svg>
+            </div>
+            <div>
+              <div class="fx-name">Compressor — Punch</div>
+              <div class="fx-sub">DynamicsCompressorNode · Kick clarity</div>
+            </div>
+          </div>
+          <label class="toggle"><input type="checkbox" id="tog-comp" checked onchange="toggleFX('comp')"><div class="toggle-track"></div><div class="toggle-thumb"></div></label>
+        </div>
+        <div class="comp-grid">
+          <div><div class="fx-row">
+            <div class="fx-row-label">Thresh</div>
+            <input type="range" class="fx-slider" id="compThresh" min="-60" max="0" step="1" value="-24" oninput="updateComp()">
+            <div class="fx-val" id="compThreshVal">−24dB</div>
+          </div></div>
+          <div><div class="fx-row">
+            <div class="fx-row-label">Ratio</div>
+            <input type="range" class="fx-slider" id="compRatio" min="1" max="20" step="0.5" value="4" oninput="updateComp()">
+            <div class="fx-val" id="compRatioVal">4:1</div>
+          </div></div>
+          <div><div class="fx-row">
+            <div class="fx-row-label">Knee</div>
+            <input type="range" class="fx-slider" id="compKnee" min="0" max="40" step="1" value="10" oninput="updateComp()">
+            <div class="fx-val" id="compKneeVal">10dB</div>
+          </div></div>
+          <div><div class="fx-row">
+            <div class="fx-row-label">Attack</div>
+            <input type="range" class="fx-slider" id="compAtk" min="0" max="1" step="0.001" value="0.003" oninput="updateComp()">
+            <div class="fx-val" id="compAtkVal">3ms</div>
+          </div></div>
+          <div><div class="fx-row">
+            <div class="fx-row-label">Release</div>
+            <input type="range" class="fx-slider" id="compRel" min="0" max="1" step="0.01" value="0.25" oninput="updateComp()">
+            <div class="fx-val" id="compRelVal">250ms</div>
+          </div></div>
+          <div><div class="fx-row">
+            <div class="fx-row-label">Makeup</div>
+            <input type="range" class="fx-slider" id="compMakeup" min="0" max="20" step="0.5" value="0" oninput="updateComp()">
+            <div class="fx-val" id="compMakeupVal">0dB</div>
+          </div></div>
+        </div>
+      </div>
+
+      <!-- SIDECHAIN COMPRESSOR (full width) -->
+      <div class="fx-card wide" id="card-sidechain">
+        <div class="fx-header">
+          <div class="fx-title-wrap">
+            <div class="fx-icon">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 18v-6a9 9 0 0 1 18 0v6"/><path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3zM3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z"/></svg>
+            </div>
+            <div>
+              <div class="fx-name">Sidechain — Pump</div>
+              <div class="fx-sub">Эффект «качa» · Pulsing / Pumping · Phonk / Memphis</div>
+            </div>
+          </div>
+          <label class="toggle"><input type="checkbox" id="tog-sidechain" onchange="toggleFX('sidechain')"><div class="toggle-track"></div><div class="toggle-thumb"></div></label>
+        </div>
+        <div class="comp-grid">
+          <div><div class="fx-row">
+            <div class="fx-row-label">BPM</div>
+            <input type="range" class="fx-slider" id="scBPM" min="60" max="200" step="1" value="140" oninput="updateSidechain()">
+            <div class="fx-val" id="scBPMVal">140</div>
+          </div></div>
+          <div><div class="fx-row">
+            <div class="fx-row-label">Depth</div>
+            <input type="range" class="fx-slider" id="scDepth" min="0" max="1" step="0.01" value="0.8" oninput="updateSidechain()">
+            <div class="fx-val" id="scDepthVal">80%</div>
+          </div></div>
+          <div><div class="fx-row">
+            <div class="fx-row-label">Attack</div>
+            <input type="range" class="fx-slider" id="scAtk" min="0.001" max="0.1" step="0.001" value="0.005" oninput="updateSidechain()">
+            <div class="fx-val" id="scAtkVal">5ms</div>
+          </div></div>
+          <div><div class="fx-row">
+            <div class="fx-row-label">Release</div>
+            <input type="range" class="fx-slider" id="scRel" min="0.05" max="0.8" step="0.01" value="0.3" oninput="updateSidechain()">
+            <div class="fx-val" id="scRelVal">300ms</div>
+          </div></div>
+          <div><div class="fx-row">
+            <div class="fx-row-label">Pattern</div>
+            <input type="range" class="fx-slider" id="scPattern" min="0" max="3" step="1" value="0" oninput="updateSidechain()">
+            <div class="fx-val" id="scPatternVal">4/4</div>
+          </div></div>
+          <div style="display:flex;align-items:center;gap:8px;padding-top:4px">
+            <div class="fx-row-label" style="min-width:auto">Тrigger</div>
+            <div class="fx-val" id="scTriggerLed" style="width:10px;height:10px;border-radius:50%;background:var(--dim);min-width:10px;box-shadow:none;transition:0.05s"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- VOLUME & SPEED (full width) -->
+      <div class="fx-card wide" id="card-global">
+        <div class="fx-header">
+          <div class="fx-title-wrap">
+            <div class="fx-icon">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+            </div>
+            <div>
+              <div class="fx-name">Master</div>
+              <div class="fx-sub">Volume · Speed / Pitch</div>
+            </div>
+          </div>
+        </div>
+        <div class="comp-grid">
+          <div><div class="fx-row">
+            <div class="fx-row-label">Volume</div>
+            <input type="range" class="fx-slider" id="vol" min="0" max="1.5" step="0.01" value="0.8" oninput="updateVol(this)">
+            <div class="fx-val" id="volVal">80%</div>
+          </div></div>
+          <div><div class="fx-row">
+            <div class="fx-row-label">Speed</div>
+            <input type="range" class="fx-slider" id="s" min="0.3" max="2" step="0.005" value="1" oninput="updateSpeed(this)">
+            <div class="fx-val" id="speedVal">100%</div>
+          </div></div>
+          <div style="display:flex;align-items:center;gap:8px;padding-top:4px">
+            <div class="fx-row-label" style="min-width:auto">Pitch Lock</div>
+            <label class="toggle" style="width:28px;height:16px">
+              <input type="checkbox" id="pitchLock" checked>
+              <div class="toggle-track"></div>
+              <div class="toggle-thumb" style="width:10px;height:10px;top:3px"></div>
+            </label>
+            <div class="fx-val" id="pitchLockVal" style="min-width:auto;font-size:8px">ON</div>
+          </div>
+        </div>
+      </div>
+
+    </div><!-- /effects-grid -->
+  </main>
+
+  <footer>
+    <span>ZERØ1 · BASS STATION · AUDIO ENGINE · WEB AUDIO API</span>
+    <div class="footer-author">
+      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 13.4a19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 3.6 2.69h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 10.4a16 16 0 0 0 5.69 5.69l1.77-1.77a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+      MADE BY <a href="https://t.me/AloneAbove" target="_blank" rel="noopener">@AloneAbove</a>
+    </div>
+  </footer>
+
+</div><!-- /app -->
+
+<!-- ══════════════ EXPORT MODAL ══════════════ -->
+<div class="modal-overlay" id="exportModal">
+  <div class="modal">
+    <div class="modal-title">EXPORT</div>
+    <div class="modal-sub">METADATA · COVER · FORMAT</div>
+    <button class="modal-close" onclick="closeExportModal()">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+    </button>
+
+    <div class="modal-cover-row">
+      <div class="cover-drop" id="coverDrop" onclick="document.getElementById('coverInput').click()">
+        <img id="coverPreview" style="display:none">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+        <div class="cover-drop-hint">COVER<br>ART</div>
+        <input type="file" id="coverInput" accept="image/*" style="display:none" onchange="loadCover(event)">
+      </div>
+
+      <div class="modal-fields">
+        <div class="field-group">
+          <div class="field-label">Название трека</div>
+          <input type="text" class="field-input" id="metaTitle" placeholder="Track Title">
+        </div>
+        <div class="field-group">
+          <div class="field-label">Исполнитель</div>
+          <input type="text" class="field-input" id="metaArtist" placeholder="Artist Name">
+        </div>
+      </div>
+    </div>
+
+    <div class="modal-extra-fields">
+      <div class="field-group">
+        <div class="field-label">Альбом</div>
+        <input type="text" class="field-input" id="metaAlbum" placeholder="Album">
+      </div>
+      <div class="field-group">
+        <div class="field-label">Год</div>
+        <input type="text" class="field-input" id="metaYear" placeholder="2025" maxlength="4">
+      </div>
+      <div class="field-group">
+        <div class="field-label">Жанр</div>
+        <input type="text" class="field-input" id="metaGenre" placeholder="Phonk / Slowed">
+      </div>
+      <div class="field-group">
+        <div class="field-label">Комментарий</div>
+        <input type="text" class="field-input" id="metaComment" placeholder="@AloneAbove">
+      </div>
+    </div>
+
+    <div style="margin-top:16px">
+      <div class="field-label" style="margin-bottom:8px">Формат экспорта</div>
+      <div class="modal-format-row">
+        <button class="format-btn selected" id="fmt-wav" onclick="selectFormat('wav')">WAV</button>
+        <button class="format-btn" id="fmt-mp3" onclick="selectFormat('mp3')">MP3 (β)</button>
+      </div>
+    </div>
+
+    <div class="modal-actions">
+      <button class="btn-modal-cancel" onclick="closeExportModal()">ОТМЕНА</button>
+      <button class="btn-modal-export" id="exportBtn" onclick="doExport()">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        <span id="exportBtnLabel">ЭКСПОРТ</span>
+      </button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ─── STATE ───────────────────────────────────────────
+let actx, src, gainNode, bassBoost, lowPass, compressor, analyzer, makeupGain;
+let distNode, distGainIn, distGainOut;
+let reverbDelay, reverbFeedback, reverbDry, reverbWet;
+let stereoDelay, stereoMerger, stereoSplitter;
+let bitNode;
+let sidechainGain; // for sidechain pump effect
+let scInterval = null;
+let scPhase = 0;
+
+let audio = new Audio();
+let playing = false;
+let rawBuffer = null;
+let fxEnabled = { bass: true, filter: true, dist: false, reverb: false, stereo: false, bit: false, comp: true, sidechain: false };
+let exportFormat = 'wav';
+let coverDataUrl = null;
+
+let bitDepthVal = 8, bitReduceVal = 1, bitActive = false;
+let bitSampleCounter = 0, bitLastSample = [0, 0];
+
+const canvas = document.getElementById('canvas');
+const cCtx = canvas.getContext('2d');
+const waveCanvas = document.getElementById('waveCanvas');
+const wCtx = waveCanvas.getContext('2d');
+
+// ─── SETUP AUDIO GRAPH ───────────────────────────────
+function setup() {
+  if (actx) return;
+  actx = new (window.AudioContext || window.webkitAudioContext)();
+  document.getElementById('sampleRate').textContent = actx.sampleRate + ' Hz';
+
+  src = actx.createMediaElementSource(audio);
+
+  bassBoost = actx.createBiquadFilter();
+  bassBoost.type = 'lowshelf';
+  bassBoost.frequency.value = 150;
+  bassBoost.gain.value = +document.getElementById('bass').value;
+
+  distGainIn = actx.createGain(); distGainIn.gain.value = 1;
+  distNode = actx.createWaveShaper();
+  distNode.curve = makeDistCurve(+document.getElementById('distDrive').value, 0);
+  distNode.oversample = '4x';
+  distGainOut = actx.createGain(); distGainOut.gain.value = 0.5;
+
+  lowPass = actx.createBiquadFilter();
+  lowPass.type = 'lowpass';
+  lowPass.frequency.value = +document.getElementById('f').value;
+
+  reverbDry = actx.createGain(); reverbDry.gain.value = 1;
+  reverbWet = actx.createGain(); reverbWet.gain.value = 0;
+  reverbDelay = actx.createDelay(5.0);
+  reverbDelay.delayTime.value = +document.getElementById('reverbSize').value;
+  reverbFeedback = actx.createGain(); reverbFeedback.gain.value = 0.55;
+  reverbDelay.connect(reverbFeedback);
+  reverbFeedback.connect(reverbDelay);
+  reverbDelay.connect(reverbWet);
+
+  stereoSplitter = actx.createChannelSplitter(2);
+  stereoMerger = actx.createChannelMerger(2);
+  stereoDelay = actx.createDelay(0.1);
+  stereoDelay.delayTime.value = 0;
+
+  bitNode = actx.createScriptProcessor(2048, 2, 2);
+  bitNode.onaudioprocess = bitProcess;
+
+  compressor = actx.createDynamicsCompressor();
+  updateComp();
+  makeupGain = actx.createGain(); makeupGain.gain.value = 1;
+
+  // Sidechain gain (pumping)
+  sidechainGain = actx.createGain();
+  sidechainGain.gain.value = 1;
+
+  gainNode = actx.createGain();
+  gainNode.gain.value = +document.getElementById('vol').value;
+
+  analyzer = actx.createAnalyser();
+  analyzer.fftSize = 512;
+  analyzer.smoothingTimeConstant = 0.8;
+
+  src.connect(bassBoost);
+  bassBoost.connect(distGainIn);
+  distGainIn.connect(distNode);
+  distNode.connect(distGainOut);
+  distGainOut.connect(lowPass);
+
+  lowPass.connect(reverbDry);
+  lowPass.connect(reverbDelay);
+  reverbDry.connect(stereoSplitter);
+  reverbWet.connect(stereoSplitter);
+
+  stereoSplitter.connect(stereoMerger, 0, 0);
+  stereoSplitter.connect(stereoDelay, 1);
+  stereoDelay.connect(stereoMerger, 0, 1);
+  stereoMerger.connect(bitNode);
+
+  bitNode.connect(compressor);
+  compressor.connect(makeupGain);
+  makeupGain.connect(sidechainGain);
+  sidechainGain.connect(gainNode);
+  gainNode.connect(analyzer);
+  analyzer.connect(actx.destination);
+
+  draw();
+  drawWave();
+}
+
+// ─── SIDECHAIN ────────────────────────────────────────
+const SC_PATTERNS = ['4/4', '3/4', '2-step', 'Shuffle'];
+function updateSidechain() {
+  const bpm = +document.getElementById('scBPM').value;
+  const depth = +document.getElementById('scDepth').value;
+  const atk = +document.getElementById('scAtk').value;
+  const rel = +document.getElementById('scRel').value;
+  const pat = +document.getElementById('scPattern').value;
+  document.getElementById('scBPMVal').textContent = bpm;
+  document.getElementById('scDepthVal').textContent = Math.round(depth * 100) + '%';
+  document.getElementById('scAtkVal').textContent = Math.round(atk * 1000) + 'ms';
+  document.getElementById('scRelVal').textContent = Math.round(rel * 1000) + 'ms';
+  document.getElementById('scPatternVal').textContent = SC_PATTERNS[pat];
+  restartSidechain();
+}
+
+function restartSidechain() {
+  if (scInterval) clearInterval(scInterval);
+  if (!fxEnabled.sidechain || !sidechainGain) return;
+
+  const bpm = +document.getElementById('scBPM').value;
+  const depth = +document.getElementById('scDepth').value;
+  const atk = +document.getElementById('scAtk').value;
+  const rel = +document.getElementById('scRel').value;
+  const pat = +document.getElementById('scPattern').value;
+
+  const patterns = [
+    [1,1,1,1],       // 4/4
+    [1,1,1],         // 3/4
+    [1,0,1,0],       // 2-step
+    [1,0,0,1,0,0,1,0] // shuffle
+  ];
+  const seq = patterns[pat];
+  let step = 0;
+
+  const beatMs = (60 / bpm) * 1000;
+
+  scInterval = setInterval(() => {
+    if (!sidechainGain || !fxEnabled.sidechain) return;
+    const hit = seq[step % seq.length];
+    if (hit) {
+      const now = actx.currentTime;
+      const minGain = 1 - depth;
+      sidechainGain.gain.cancelScheduledValues(now);
+      sidechainGain.gain.setValueAtTime(minGain, now);
+      sidechainGain.gain.linearRampToValueAtTime(1, now + rel);
+      // Visual LED
+      const led = document.getElementById('scTriggerLed');
+      led.style.background = 'var(--green)';
+      led.style.boxShadow = '0 0 8px var(--green)';
+      // Pump animation on card
+      const card = document.getElementById('card-sidechain');
+      card.classList.remove('sidechain-pump');
+      void card.offsetWidth;
+      card.classList.add('sidechain-pump');
+      setTimeout(() => {
+        led.style.background = 'var(--dim)';
+        led.style.boxShadow = 'none';
+      }, Math.min(120, rel * 500));
+    }
+    step++;
+  }, beatMs);
+}
+
+// ─── DISTORTION ──────────────────────────────────────
+function makeDistCurve(amount, type) {
+  const n = 256, curve = new Float32Array(n);
+  for (let i = 0; i < n; i++) {
+    const x = (i * 2) / n - 1;
+    if (type === 0) curve[i] = ((Math.PI + amount) * x) / (Math.PI + amount * Math.abs(x));
+    else if (type === 1) curve[i] = Math.max(-0.8, Math.min(0.8, x * (amount / 50 + 1)));
+    else curve[i] = Math.sign(x) * (1 - Math.exp(-Math.abs(x) * (amount / 50 + 1)));
+  }
+  return curve;
+}
+
+// ─── BITCRUSHER ──────────────────────────────────────
+function bitProcess(e) {
+  if (!bitActive) {
+    for (let ch = 0; ch < 2; ch++) {
+      e.outputBuffer.getChannelData(ch).set(e.inputBuffer.getChannelData(ch));
+    }
+    return;
+  }
+  const step = Math.pow(2, bitDepthVal);
+  for (let ch = 0; ch < 2; ch++) {
+    const inp = e.inputBuffer.getChannelData(ch);
+    const out = e.outputBuffer.getChannelData(ch);
+    for (let i = 0; i < inp.length; i++) {
+      if (i % bitReduceVal === 0) bitLastSample[ch] = Math.round(inp[i] * step) / step;
+      out[i] = bitLastSample[ch];
+    }
+  }
+}
+
+// ─── FX TOGGLE ───────────────────────────────────────
+function toggleFX(id) {
+  fxEnabled[id] = !fxEnabled[id];
+  const card = document.getElementById('card-' + id);
+  if (fxEnabled[id]) card.classList.add('fx-active');
+  else card.classList.remove('fx-active');
+
+  switch(id) {
+    case 'bass': if (bassBoost) bassBoost.gain.value = fxEnabled.bass ? +document.getElementById('bass').value : 0; break;
+    case 'filter': if (lowPass) lowPass.frequency.value = fxEnabled.filter ? +document.getElementById('f').value : 20000; break;
+    case 'dist': updateDist(document.getElementById('distDrive')); break;
+    case 'reverb': if (reverbWet) reverbWet.gain.value = fxEnabled.reverb ? +document.getElementById('reverbMix').value : 0; break;
+    case 'stereo': if (stereoDelay) stereoDelay.delayTime.value = fxEnabled.stereo ? +document.getElementById('stereoWidth').value / 1000 : 0; break;
+    case 'bit': bitActive = fxEnabled.bit; break;
+    case 'comp': if (compressor) { compressor.threshold.value = fxEnabled.comp ? +document.getElementById('compThresh').value : 0; compressor.ratio.value = fxEnabled.comp ? +document.getElementById('compRatio').value : 1; } break;
+    case 'sidechain':
+      if (fxEnabled.sidechain) { restartSidechain(); }
+      else {
+        if (scInterval) clearInterval(scInterval);
+        if (sidechainGain && actx) { sidechainGain.gain.cancelScheduledValues(actx.currentTime); sidechainGain.gain.setValueAtTime(1, actx.currentTime); }
+        document.getElementById('scTriggerLed').style.background = 'var(--dim)';
+      }
+      break;
+  }
+}
+
+document.querySelectorAll('[id^="tog-"]').forEach(tog => {
+  const id = tog.id.replace('tog-','');
+  if (tog.checked && document.getElementById('card-'+id)) {
+    document.getElementById('card-'+id).classList.add('fx-active');
+  }
+});
+
+// ─── UPDATERS ────────────────────────────────────────
+function updateBass(el) {
+  if (bassBoost && fxEnabled.bass) bassBoost.gain.value = el.value;
+  document.getElementById('bassVal').textContent = el.value + 'dB';
+}
+function updateFilter(el) {
+  if (lowPass && fxEnabled.filter) lowPass.frequency.value = el.value;
+  document.getElementById('filterVal').textContent = el.value >= 1000 ? (el.value/1000).toFixed(1)+'kHz' : el.value+'Hz';
+}
+function updateDist(el) {
+  if (!distNode) return;
+  const amt = fxEnabled.dist ? +el.value : 0;
+  distNode.curve = makeDistCurve(amt, +document.getElementById('distCurve').value);
+  document.getElementById('distVal').textContent = el.value;
+}
+function updateDistCurve(el) {
+  const names = ['SOFT','HARD','FUZZ'];
+  document.getElementById('distCurveVal').textContent = names[el.value];
+  if (distNode && fxEnabled.dist) distNode.curve = makeDistCurve(+document.getElementById('distDrive').value, +el.value);
+}
+function updateReverb(param, el) {
+  if (param === 'size') { if (reverbDelay) reverbDelay.delayTime.value = el.value; document.getElementById('reverbSizeVal').textContent = el.value + 's'; }
+  else { if (reverbWet && fxEnabled.reverb) reverbWet.gain.value = el.value; document.getElementById('reverbMixVal').textContent = Math.round(el.value*100)+'%'; }
+}
+function updateStereo(el) {
+  if (stereoDelay && fxEnabled.stereo) stereoDelay.delayTime.value = el.value / 1000;
+  document.getElementById('stereoVal').textContent = el.value + 'ms';
+}
+function updateBit(param, el) {
+  if (param === 'depth') { bitDepthVal = +el.value; document.getElementById('bitDepthVal').textContent = el.value+'bit'; }
+  else { bitReduceVal = +el.value; document.getElementById('bitReduceVal').textContent = el.value+'x'; }
+}
+function updateComp() {
+  if (!compressor) return;
+  const t = +document.getElementById('compThresh').value;
+  const r = +document.getElementById('compRatio').value;
+  const k = +document.getElementById('compKnee').value;
+  const a = +document.getElementById('compAtk').value;
+  const rl = +document.getElementById('compRel').value;
+  const mu = +document.getElementById('compMakeup').value;
+  if (fxEnabled.comp) { compressor.threshold.value = t; compressor.ratio.value = r; compressor.knee.value = k; compressor.attack.value = a; compressor.release.value = rl; }
+  if (makeupGain) makeupGain.gain.value = Math.pow(10, mu/20);
+  document.getElementById('compThreshVal').textContent = t+'dB';
+  document.getElementById('compRatioVal').textContent = r+':1';
+  document.getElementById('compKneeVal').textContent = k+'dB';
+  document.getElementById('compAtkVal').textContent = Math.round(a*1000)+'ms';
+  document.getElementById('compRelVal').textContent = Math.round(rl*1000)+'ms';
+  document.getElementById('compMakeupVal').textContent = mu+'dB';
+}
+function updateVol(el) {
+  if (gainNode) gainNode.gain.value = el.value;
+  document.getElementById('volVal').textContent = Math.round(el.value/1.5*100)+'%';
+}
+function updateSpeed(el) {
+  audio.playbackRate = el.value;
+  audio.preservesPitch = document.getElementById('pitchLock').checked;
+  document.getElementById('speedVal').textContent = Math.round(el.value*100)+'%';
+}
+document.getElementById('pitchLock').onchange = function() {
+  audio.preservesPitch = this.checked;
+  document.getElementById('pitchLockVal').textContent = this.checked ? 'ON' : 'OFF';
+};
+
+// ─── PLAY / PAUSE ────────────────────────────────────
+function togglePlay() {
+  if (!rawBuffer) { alert('Загрузи трек!'); return; }
+  setup();
+  actx.resume();
+  if (playing) {
+    audio.pause(); playing = false;
+    document.getElementById('playLabel').textContent = 'PLAY';
+    document.getElementById('playIcon').innerHTML = '<polygon points="2,1 11,6 2,11"/>';
+    document.getElementById('pulseRing').style.display = 'none';
+    document.getElementById('p').classList.remove('playing');
+    document.getElementById('statusDot').classList.remove('active');
+    document.getElementById('statusText').textContent = 'PAUSED';
+    if (scInterval) clearInterval(scInterval);
+  } else {
+    audio.play(); playing = true;
+    document.getElementById('playLabel').textContent = 'PAUSE';
+    document.getElementById('playIcon').innerHTML = '<rect x="1" y="1" width="4" height="10"/><rect x="7" y="1" width="4" height="10"/>';
+    document.getElementById('pulseRing').style.display = 'block';
+    document.getElementById('p').classList.add('playing');
+    document.getElementById('statusDot').classList.add('active');
+    document.getElementById('statusText').textContent = 'PLAYING';
+    if (fxEnabled.sidechain) restartSidechain();
+  }
+}
+
+audio.onended = () => {
+  playing = false;
+  document.getElementById('playLabel').textContent = 'PLAY';
+  document.getElementById('playIcon').innerHTML = '<polygon points="2,1 11,6 2,11"/>';
+  document.getElementById('pulseRing').style.display = 'none';
+  document.getElementById('p').classList.remove('playing');
+  document.getElementById('statusDot').classList.remove('active');
+  document.getElementById('statusText').textContent = 'STOPPED';
+  if (scInterval) clearInterval(scInterval);
+};
+
+// ─── FILE LOAD ───────────────────────────────────────
+document.getElementById('u').onchange = async (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  audio.src = URL.createObjectURL(file);
+  const ab = await file.arrayBuffer();
+  const tmp = new AudioContext();
+  rawBuffer = await tmp.decodeAudioData(ab);
+  // Pre-fill title
+  const nameParts = file.name.replace(/\.[^.]+$/, '').split(' - ');
+  if (nameParts.length >= 2) {
+    document.getElementById('metaArtist').value = nameParts[0].trim();
+    document.getElementById('metaTitle').value = nameParts.slice(1).join(' - ').trim();
+  } else {
+    document.getElementById('metaTitle').value = file.name.replace(/\.[^.]+$/, '');
+  }
+  document.getElementById('fileName').textContent = file.name.length > 24 ? file.name.slice(0,22)+'…' : file.name;
+  document.getElementById('dropZone').classList.add('loaded');
+  document.getElementById('statusText').textContent = 'READY';
+  drawWaveformFromBuffer(rawBuffer);
+};
+
+// ─── SEEK ────────────────────────────────────────────
+document.getElementById('seekbar').oninput = function() { audio.currentTime = this.value; };
+audio.ontimeupdate = () => {
+  if (!isNaN(audio.duration)) {
+    const sb = document.getElementById('seekbar');
+    sb.max = audio.duration;
+    sb.value = audio.currentTime;
+    document.getElementById('curTime').textContent = fmt(audio.currentTime);
+    document.getElementById('durTime').textContent = fmt(audio.duration);
+    document.getElementById('seekPerc').textContent = Math.round((audio.currentTime/audio.duration)*100)+'%';
+    drawPlayhead(audio.currentTime/audio.duration);
+  }
+};
+function fmt(s) { const m=Math.floor(s/60),sec=Math.floor(s%60); return m+':'+(sec<10?'0':'')+sec; }
+
+// ─── VISUALIZER ──────────────────────────────────────
+function draw() {
+  requestAnimationFrame(draw);
+  if (!analyzer) return;
+  const buf = new Uint8Array(analyzer.frequencyBinCount);
+  analyzer.getByteFrequencyData(buf);
+
+  const isMobile = window.innerWidth <= 768;
+  const cw = isMobile ? 60 : 140;
+  const ch = isMobile ? 80 : 320;
+  if (canvas.width !== cw || canvas.height !== ch) { canvas.width = cw; canvas.height = ch; }
+
+  cCtx.fillStyle = '#000';
+  cCtx.fillRect(0, 0, cw, ch);
+
+  if (!isMobile) {
+    const barH = ch / buf.length;
+    for (let i = 0; i < buf.length; i++) {
+      const v = buf[i], pct = v/255;
+      const barW = pct * (cw-4);
+      const y = ch - (i*barH) - barH;
+      const r = 116+Math.round(pct*139), g = Math.min(255,200+Math.round(pct*55)), b = 40+Math.round(pct*80);
+      cCtx.fillStyle = `rgb(${r},${g},${b})`;
+      cCtx.fillRect(2, y+0.5, barW, Math.max(1,barH-0.5));
+    }
+  } else {
+    const step = Math.floor(buf.length / cw);
+    for (let x = 0; x < cw; x++) {
+      let v = 0;
+      for (let k = 0; k < step; k++) v = Math.max(v, buf[x*step+k]||0);
+      const pct = v/255, barH = pct*ch;
+      const r = 116+Math.round(pct*139), g = Math.min(255,200+Math.round(pct*55)), b = 40+Math.round(pct*80);
+      cCtx.fillStyle = `rgb(${r},${g},${b})`;
+      cCtx.fillRect(x, ch-barH, 1, barH||1);
+    }
+  }
+
+  const avg = buf.reduce((a,b)=>a+b,0)/buf.length;
+  if (isMobile) {
+    document.getElementById('levelFill').style.width = Math.min(100, avg/1.28)+'%';
+    document.getElementById('levelFill').style.height = '100%';
+  } else {
+    document.getElementById('levelFill').style.height = Math.min(100, avg/1.28)+'%';
+    document.getElementById('levelFill').style.width = '';
+  }
+}
+
+// ─── WAVEFORM ────────────────────────────────────────
+let waveformData = null, playhead = 0;
+
+function drawWaveformFromBuffer(buf) {
+  const ch = buf.getChannelData(0);
+  const step = Math.floor(ch.length/800);
+  waveformData = [];
+  for (let i = 0; i < 800; i++) {
+    let max = 0;
+    for (let j = 0; j < step; j++) max = Math.max(max, Math.abs(ch[i*step+j]||0));
+    waveformData.push(max);
+  }
+  drawWave();
+}
+
+function drawPlayhead(p) { playhead = p; drawWave(); }
+
+function drawWave() {
+  const w = waveCanvas.parentElement ? waveCanvas.parentElement.clientWidth - 40 || 300 : 300;
+  waveCanvas.width = w;
+  waveCanvas.height = 50;
+  wCtx.clearRect(0, 0, w, 50);
+  if (!waveformData) return;
+  const step = waveformData.length/w;
+  for (let x = 0; x < w; x++) {
+    const v = waveformData[Math.floor(x*step)]||0;
+    const barH = v*44;
+    const played = x/w < playhead;
+    wCtx.fillStyle = played ? '#74fd62' : '#1a2a18';
+    wCtx.fillRect(x, 25-barH/2, 1, barH||1);
+  }
+  const px = playhead*w;
+  wCtx.fillStyle = '#b9f549';
+  wCtx.fillRect(px-1, 0, 2, 50);
+}
+
+// ─── EXPORT MODAL ────────────────────────────────────
+function openExportModal() {
+  if (!rawBuffer) { alert('Загрузи трек!'); return; }
+  document.getElementById('exportModal').classList.add('open');
+  document.body.style.overflow = 'hidden';
+}
+function closeExportModal() {
+  document.getElementById('exportModal').classList.remove('open');
+  document.body.style.overflow = '';
+}
+document.getElementById('exportModal').addEventListener('click', function(e) {
+  if (e.target === this) closeExportModal();
+});
+
+function loadCover(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = function(ev) {
+    coverDataUrl = ev.target.result;
+    const img = document.getElementById('coverPreview');
+    img.src = coverDataUrl;
+    img.style.display = 'block';
+    const hint = document.querySelector('.cover-drop-hint');
+    if (hint) hint.style.display = 'none';
+    document.querySelector('.cover-drop > svg').style.display = 'none';
+  };
+  reader.readAsDataURL(file);
+}
+
+function selectFormat(fmt) {
+  exportFormat = fmt;
+  document.querySelectorAll('.format-btn').forEach(b => b.classList.remove('selected'));
+  document.getElementById('fmt-' + fmt).classList.add('selected');
+}
+
+async function doExport() {
+  const btn = document.getElementById('exportBtn');
+  const lbl = document.getElementById('exportBtnLabel');
+  btn.disabled = true; lbl.textContent = 'РЕНДЕР…';
+
+  const rate = +document.getElementById('s').value;
+  const outLen = Math.ceil(rawBuffer.length / rate);
+  const offCtx = new OfflineAudioContext(2, outLen, rawBuffer.sampleRate);
+
+  const bSrc = offCtx.createBufferSource();
+  bSrc.buffer = rawBuffer;
+  bSrc.playbackRate.value = rate;
+
+  const oBass = offCtx.createBiquadFilter();
+  oBass.type = 'lowshelf'; oBass.frequency.value = 150;
+  oBass.gain.value = fxEnabled.bass ? +document.getElementById('bass').value : 0;
+
+  const oDist = offCtx.createWaveShaper();
+  oDist.curve = makeDistCurve(fxEnabled.dist ? +document.getElementById('distDrive').value : 0, +document.getElementById('distCurve').value);
+  oDist.oversample = '4x';
+
+  const oFilt = offCtx.createBiquadFilter();
+  oFilt.type = 'lowpass';
+  oFilt.frequency.value = fxEnabled.filter ? +document.getElementById('f').value : 20000;
+
+  const oRevDry = offCtx.createGain(); oRevDry.gain.value = 1;
+  const oRevWet = offCtx.createGain(); oRevWet.gain.value = fxEnabled.reverb ? +document.getElementById('reverbMix').value : 0;
+  const oRevDelay = offCtx.createDelay(5);
+  oRevDelay.delayTime.value = +document.getElementById('reverbSize').value;
+  const oRevFb = offCtx.createGain(); oRevFb.gain.value = 0.55;
+  oRevDelay.connect(oRevFb); oRevFb.connect(oRevDelay); oRevDelay.connect(oRevWet);
+
+  const oSplit = offCtx.createChannelSplitter(2);
+  const oMerge = offCtx.createChannelMerger(2);
+  const oSDelay = offCtx.createDelay(0.1);
+  oSDelay.delayTime.value = fxEnabled.stereo ? +document.getElementById('stereoWidth').value/1000 : 0;
+
+  const oComp = offCtx.createDynamicsCompressor();
+  if (fxEnabled.comp) {
+    oComp.threshold.value = +document.getElementById('compThresh').value;
+    oComp.ratio.value = +document.getElementById('compRatio').value;
+    oComp.knee.value = +document.getElementById('compKnee').value;
+    oComp.attack.value = +document.getElementById('compAtk').value;
+    oComp.release.value = +document.getElementById('compRel').value;
+  }
+  const oMakeup = offCtx.createGain();
+  oMakeup.gain.value = Math.pow(10, +document.getElementById('compMakeup').value/20);
+
+  // Sidechain pump in offline context
+  const oScGain = offCtx.createGain();
+  if (fxEnabled.sidechain) {
+    const scBPM = +document.getElementById('scBPM').value;
+    const scDepth = +document.getElementById('scDepth').value;
+    const scAtk = +document.getElementById('scAtk').value;
+    const scRel = +document.getElementById('scRel').value;
+    const scPat = +document.getElementById('scPattern').value;
+    const patterns = [[1,1,1,1],[1,1,1],[1,0,1,0],[1,0,0,1,0,0,1,0]];
+    const seq = patterns[scPat];
+    const beatSec = 60/scBPM;
+    const totalBeats = Math.ceil(outLen / rawBuffer.sampleRate / beatSec) + 4;
+    for (let i = 0; i < totalBeats; i++) {
+      const beat = seq[i % seq.length];
+      if (beat) {
+        const t = i * beatSec;
+        oScGain.gain.setValueAtTime(1-scDepth, t);
+        oScGain.gain.linearRampToValueAtTime(1, t+scRel);
+      }
+    }
+    oScGain.gain.setValueAtTime(1, 0);
+  } else {
+    oScGain.gain.value = 1;
+  }
+
+  const oGain = offCtx.createGain();
+  oGain.gain.value = +document.getElementById('vol').value;
+
+  bSrc.connect(oBass); oBass.connect(oDist); oDist.connect(oFilt);
+  oFilt.connect(oRevDry); oFilt.connect(oRevDelay);
+  oRevDry.connect(oSplit); oRevWet.connect(oSplit);
+  oSplit.connect(oMerge, 0, 0); oSplit.connect(oSDelay, 1); oSDelay.connect(oMerge, 0, 1);
+  oMerge.connect(oComp); oComp.connect(oMakeup); oMakeup.connect(oScGain);
+  oScGain.connect(oGain); oGain.connect(offCtx.destination);
+  bSrc.start();
+
+  const rendered = await offCtx.startRendering();
+
+  const title = document.getElementById('metaTitle').value || 'zer01_processed';
+  const artist = document.getElementById('metaArtist').value || '@AloneAbove';
+  const fname = (artist ? artist.replace(/[^a-z0-9а-яё _-]/gi,'') + ' - ' : '') + (title.replace(/[^a-z0-9а-яё _-]/gi,'') || 'track');
+
+  // Write WAV with ID3-lite (artist/title in comment chunk)
+  const nCh = rendered.numberOfChannels;
+  const len = rendered.length * nCh * 2 + 44;
+  const out = new ArrayBuffer(len);
+  const view = new DataView(out);
+  const chData = [];
+  for (let c = 0; c < nCh; c++) chData.push(rendered.getChannelData(c));
+
+  const ws = (o, s) => { for (let i = 0; i < s.length; i++) view.setUint8(o+i, s.charCodeAt(i)); };
+  ws(0,'RIFF'); view.setUint32(4,len-8,true); ws(8,'WAVE');
+  ws(12,'fmt '); view.setUint32(16,16,true); view.setUint16(20,1,true);
+  view.setUint16(22,nCh,true); view.setUint32(24,rendered.sampleRate,true);
+  view.setUint32(28,rendered.sampleRate*nCh*2,true); view.setUint16(32,nCh*2,true);
+  view.setUint16(34,16,true); ws(36,'data'); view.setUint32(40,len-44,true);
+  let offset = 44;
+  for (let i = 0; i < rendered.length; i++) {
+    for (let c = 0; c < nCh; c++) {
+      const s = Math.max(-1,Math.min(1,chData[c][i]));
+      view.setInt16(offset, s<0?s*0x8000:s*0x7FFF, true);
+      offset += 2;
+    }
+  }
+
+  const blob = new Blob([out], {type:'audio/wav'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = fname + '.wav';
+  a.click();
+
+  btn.disabled = false; lbl.textContent = 'ЭКСПОРТ';
+  closeExportModal();
+}
+
+// ─── INIT ────────────────────────────────────────────
+window.onresize = () => { drawWave(); };
+drawWave();
+
+document.querySelectorAll('input[type=range]').forEach(el => {
+  el.addEventListener('touchstart', e => e.stopPropagation(), { passive: true });
+  el.addEventListener('touchmove', e => e.stopPropagation(), { passive: true });
+});
+</script>
+</body>
+</html>
