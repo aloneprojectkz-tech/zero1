@@ -1423,7 +1423,7 @@ let bassBoost, lowPass, compressor, analyzer, makeupGain;
 let distNode, distGainIn, distGainOut;
 let reverbDelay, reverbFeedback, reverbDry, reverbWet;
 let stereoDelay, stereoMerger, stereoSplitter;
-let bitNode, sidechainGain, gainNode;
+let bitNode, bitBypass, sidechainGain, gainNode;
 
 // Playback state (AudioBufferSourceNode based)
 let playbackNode = null;   // current AudioBufferSourceNode
@@ -1493,12 +1493,14 @@ function buildGraph() {
   stereoDelay = actx.createDelay(0.1);
   stereoDelay.delayTime.value = fxEnabled.stereo ? +document.getElementById('stereoWidth').value / 1000 : 0;
 
+  // bitBypass: always in chain (simple pass-through gain, silent, no CPU cost)
+  // bitNode (ScriptProcessor) is only connected when user enables Bitcrusher
+  bitBypass = actx.createGain(); bitBypass.gain.value = 1;
   try {
-    bitNode = actx.createScriptProcessor(2048, 2, 2);
+    bitNode = actx.createScriptProcessor(4096, 2, 2);
     bitNode.onaudioprocess = bitProcess;
   } catch(e) {
-    bitNode = actx.createGain(); bitNode.gain.value = 1;
-    bitActive = false;
+    bitNode = null;
   }
 
   compressor = actx.createDynamicsCompressor();
@@ -1528,9 +1530,10 @@ function buildGraph() {
   stereoSplitter.connect(stereoMerger, 0, 0);
   stereoSplitter.connect(stereoDelay, 1);
   stereoDelay.connect(stereoMerger, 0, 1);
-  stereoMerger.connect(bitNode);
-
-  bitNode.connect(compressor);
+  // Bitcrusher is NOT in the chain by default — avoids ticks when disabled
+  stereoMerger.connect(bitBypass);
+  bitBypass.connect(compressor);
+  // bitNode connects only when enabled (see toggleFX 'bit')
   compressor.connect(makeupGain);
   makeupGain.connect(sidechainGain);
   sidechainGain.connect(gainNode);
@@ -1788,7 +1791,24 @@ function toggleFX(id) {
     case 'dist': updateDist(document.getElementById('distDrive')); break;
     case 'reverb': if (reverbWet) reverbWet.gain.value = fxEnabled.reverb ? +document.getElementById('reverbMix').value : 0; break;
     case 'stereo': if (stereoDelay) stereoDelay.delayTime.value = fxEnabled.stereo ? +document.getElementById('stereoWidth').value / 1000 : 0; break;
-    case 'bit': bitActive = fxEnabled.bit; break;
+    case 'bit':
+      bitActive = fxEnabled.bit;
+      if (bitNode) {
+        if (fxEnabled.bit) {
+          // Insert ScriptProcessor: stereoMerger → bitNode → compressor, bypass disconnected
+          try { stereoMerger.disconnect(bitBypass); } catch(e){}
+          stereoMerger.connect(bitNode);
+          try { bitBypass.disconnect(compressor); } catch(e){}
+          bitNode.connect(compressor);
+        } else {
+          // Remove ScriptProcessor, restore bypass
+          try { stereoMerger.disconnect(bitNode); } catch(e){}
+          try { bitNode.disconnect(compressor); } catch(e){}
+          stereoMerger.connect(bitBypass);
+          bitBypass.connect(compressor);
+        }
+      }
+      break;
     case 'comp': if (compressor) { compressor.threshold.value = fxEnabled.comp ? +document.getElementById('compThresh').value : 0; compressor.ratio.value = fxEnabled.comp ? +document.getElementById('compRatio').value : 1; } break;
     case 'sidechain':
       if (fxEnabled.sidechain) { restartSidechain(); }
