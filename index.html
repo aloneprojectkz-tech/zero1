@@ -3,6 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline' 'unsafe-eval' https: blob: data:; media-src 'self' https: blob: data:; script-src 'self' 'unsafe-inline' 'unsafe-eval' https:; style-src 'self' 'unsafe-inline' https:; font-src 'self' https: data:; img-src 'self' https: blob: data:; connect-src 'self' https: blob:;">
 <title>ZERØ1 — Ultimate Bass Station</title>
 <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Bebas+Neue&family=DM+Sans:wght@300;400;600&display=swap" rel="stylesheet">
 <style>
@@ -1473,8 +1474,17 @@ function setup() {
   stereoDelay = actx.createDelay(0.1);
   stereoDelay.delayTime.value = 0;
 
-  bitNode = actx.createScriptProcessor(2048, 2, 2);
-  bitNode.onaudioprocess = bitProcess;
+  // AudioWorklet-compatible bitcrusher: use ScriptProcessor with fallback
+  // Note: ScriptProcessorNode deprecated but still works; suppress with try/catch
+  try {
+    bitNode = actx.createScriptProcessor(2048, 2, 2);
+    bitNode.onaudioprocess = bitProcess;
+  } catch(e) {
+    // Fallback: bypass node if ScriptProcessor unavailable
+    bitNode = actx.createGain();
+    bitNode.gain.value = 1;
+    bitActive = false;
+  }
 
   compressor = actx.createDynamicsCompressor();
   updateComp();
@@ -1724,7 +1734,11 @@ function togglePlay() {
     document.getElementById('statusText').textContent = 'PAUSED';
     if (scInterval) clearInterval(scInterval);
   } else {
-    audio.play(); playing = true;
+    audio.play().catch(err => {
+      console.warn('Play error:', err);
+      document.getElementById('statusText').textContent = 'ERROR';
+    });
+    playing = true;
     document.getElementById('playLabel').textContent = 'PAUSE';
     document.getElementById('playIcon').innerHTML = '<rect x="1" y="1" width="4" height="10"/><rect x="7" y="1" width="4" height="10"/>';
     document.getElementById('pulseRing').style.display = 'block';
@@ -1747,14 +1761,49 @@ audio.onended = () => {
 };
 
 // ─── FILE LOAD ───────────────────────────────────────
+// Uses FileReader+base64 data URL to avoid blob: CSP restrictions on hosted environments
 document.getElementById('u').onchange = async (e) => {
   const file = e.target.files[0];
   if (!file) return;
-  audio.src = URL.createObjectURL(file);
+
+  document.getElementById('statusText').textContent = 'LOADING…';
+
+  // Decode audio buffer for waveform & offline export
   const ab = await file.arrayBuffer();
-  const tmp = new AudioContext();
-  rawBuffer = await tmp.decodeAudioData(ab);
-  // Pre-fill title
+  const tmp = new (window.AudioContext || window.webkitAudioContext)();
+  rawBuffer = await tmp.decodeAudioData(ab.slice(0));
+  try { await tmp.close(); } catch(_){}
+
+  // Load audio element via base64 data URL (avoids blob: CSP issues on hosting)
+  const reader = new FileReader();
+  reader.onload = function(ev) {
+    audio.pause();
+    audio.removeAttribute('src');
+    audio.load();
+    // Reset audio graph so it rebuilds cleanly with new source
+    if (actx) {
+      try { actx.close(); } catch(ex){}
+      actx = null; src = null; gainNode = null; bassBoost = null; lowPass = null;
+      compressor = null; analyzer = null; makeupGain = null;
+      distNode = null; distGainIn = null; distGainOut = null;
+      reverbDelay = null; reverbFeedback = null; reverbDry = null; reverbWet = null;
+      stereoDelay = null; stereoMerger = null; stereoSplitter = null;
+      bitNode = null; sidechainGain = null;
+    }
+    audio.src = ev.target.result;
+    audio.load();
+    playing = false;
+    document.getElementById('playLabel').textContent = 'PLAY';
+    document.getElementById('playIcon').innerHTML = '<polygon points="2,1 11,6 2,11"/>';
+    document.getElementById('pulseRing').style.display = 'none';
+    document.getElementById('p').classList.remove('playing');
+    document.getElementById('statusDot').classList.remove('active');
+    document.getElementById('statusText').textContent = 'READY';
+  };
+  reader.onerror = () => { document.getElementById('statusText').textContent = 'ERROR'; };
+  reader.readAsDataURL(file);
+
+  // Pre-fill metadata from filename
   const nameParts = file.name.replace(/\.[^.]+$/, '').split(' - ');
   if (nameParts.length >= 2) {
     document.getElementById('metaArtist').value = nameParts[0].trim();
@@ -1764,10 +1813,8 @@ document.getElementById('u').onchange = async (e) => {
   }
   document.getElementById('fileName').textContent = file.name.length > 24 ? file.name.slice(0,22)+'…' : file.name;
   document.getElementById('dropZone').classList.add('loaded');
-  document.getElementById('statusText').textContent = 'READY';
   drawWaveformFromBuffer(rawBuffer);
 };
-
 // ─── SEEK ────────────────────────────────────────────
 document.getElementById('seekbar').oninput = function() { audio.currentTime = this.value; };
 audio.ontimeupdate = () => {
