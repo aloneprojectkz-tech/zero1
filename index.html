@@ -1412,56 +1412,75 @@
 </div>
 
 <script>
+// ══════════════════════════════════════════════════════════════
+//  ZERØ1 BASS STATION — Pure Web Audio API engine (no HTMLAudioElement)
+//  Fully CSP-safe: no blob: URLs needed for playback
+// ══════════════════════════════════════════════════════════════
+
 // ─── STATE ───────────────────────────────────────────
-let actx, src, gainNode, bassBoost, lowPass, compressor, analyzer, makeupGain;
+let actx = null;
+let bassBoost, lowPass, compressor, analyzer, makeupGain;
 let distNode, distGainIn, distGainOut;
 let reverbDelay, reverbFeedback, reverbDry, reverbWet;
 let stereoDelay, stereoMerger, stereoSplitter;
-let bitNode;
-let sidechainGain; // for sidechain pump effect
-let scInterval = null;
-let scPhase = 0;
+let bitNode, sidechainGain, gainNode;
 
-let audio = new Audio();
+// Playback state (AudioBufferSourceNode based)
+let playbackNode = null;   // current AudioBufferSourceNode
+let startTime = 0;         // actx.currentTime when play started
+let pauseOffset = 0;       // seconds into rawBuffer where we paused
 let playing = false;
-let rawBuffer = null;
+let rawBuffer = null;      // decoded AudioBuffer
+
 let fxEnabled = { bass: true, filter: true, dist: false, reverb: false, stereo: false, bit: false, comp: true, sidechain: false };
 let exportFormat = 'wav';
 let coverDataUrl = null;
+let playbackRate = 1.0;
+let pitchLockOn = true;
 
 let bitDepthVal = 8, bitReduceVal = 1, bitActive = false;
-let bitSampleCounter = 0, bitLastSample = [0, 0];
+let bitLastSample = [0, 0];
+
+let scInterval = null;
+const SC_PATTERNS = ['4/4', '3/4', '2-step', 'Shuffle'];
 
 const canvas = document.getElementById('canvas');
 const cCtx = canvas.getContext('2d');
 const waveCanvas = document.getElementById('waveCanvas');
 const wCtx = waveCanvas.getContext('2d');
 
-// ─── SETUP AUDIO GRAPH ───────────────────────────────
-function setup() {
+// ─── INIT AUDIO CONTEXT ──────────────────────────────
+function initCtx() {
   if (actx) return;
   actx = new (window.AudioContext || window.webkitAudioContext)();
   document.getElementById('sampleRate').textContent = actx.sampleRate + ' Hz';
+  buildGraph();
+  draw();
+}
 
-  src = actx.createMediaElementSource(audio);
-
+// ─── BUILD EFFECTS GRAPH ─────────────────────────────
+// Graph: [src] → bassBoost → distGainIn → distNode → distGainOut → lowPass
+//        → reverbDry+reverbWet → stereoSplitter → stereoMerger
+//        → bitNode → compressor → makeupGain → sidechainGain → gainNode → analyzer → out
+function buildGraph() {
   bassBoost = actx.createBiquadFilter();
   bassBoost.type = 'lowshelf';
   bassBoost.frequency.value = 150;
-  bassBoost.gain.value = +document.getElementById('bass').value;
+  bassBoost.gain.value = fxEnabled.bass ? +document.getElementById('bass').value : 0;
 
   distGainIn = actx.createGain(); distGainIn.gain.value = 1;
   distNode = actx.createWaveShaper();
-  distNode.curve = makeDistCurve(+document.getElementById('distDrive').value, 0);
+  distNode.curve = makeDistCurve(fxEnabled.dist ? +document.getElementById('distDrive').value : 0,
+                                  +document.getElementById('distCurve').value);
   distNode.oversample = '4x';
   distGainOut = actx.createGain(); distGainOut.gain.value = 0.5;
 
   lowPass = actx.createBiquadFilter();
   lowPass.type = 'lowpass';
-  lowPass.frequency.value = +document.getElementById('f').value;
+  lowPass.frequency.value = fxEnabled.filter ? +document.getElementById('f').value : 20000;
 
   reverbDry = actx.createGain(); reverbDry.gain.value = 1;
-  reverbWet = actx.createGain(); reverbWet.gain.value = 0;
+  reverbWet = actx.createGain(); reverbWet.gain.value = fxEnabled.reverb ? +document.getElementById('reverbMix').value : 0;
   reverbDelay = actx.createDelay(5.0);
   reverbDelay.delayTime.value = +document.getElementById('reverbSize').value;
   reverbFeedback = actx.createGain(); reverbFeedback.gain.value = 0.55;
@@ -1472,17 +1491,13 @@ function setup() {
   stereoSplitter = actx.createChannelSplitter(2);
   stereoMerger = actx.createChannelMerger(2);
   stereoDelay = actx.createDelay(0.1);
-  stereoDelay.delayTime.value = 0;
+  stereoDelay.delayTime.value = fxEnabled.stereo ? +document.getElementById('stereoWidth').value / 1000 : 0;
 
-  // AudioWorklet-compatible bitcrusher: use ScriptProcessor with fallback
-  // Note: ScriptProcessorNode deprecated but still works; suppress with try/catch
   try {
     bitNode = actx.createScriptProcessor(2048, 2, 2);
     bitNode.onaudioprocess = bitProcess;
   } catch(e) {
-    // Fallback: bypass node if ScriptProcessor unavailable
-    bitNode = actx.createGain();
-    bitNode.gain.value = 1;
+    bitNode = actx.createGain(); bitNode.gain.value = 1;
     bitActive = false;
   }
 
@@ -1490,9 +1505,7 @@ function setup() {
   updateComp();
   makeupGain = actx.createGain(); makeupGain.gain.value = 1;
 
-  // Sidechain gain (pumping)
-  sidechainGain = actx.createGain();
-  sidechainGain.gain.value = 1;
+  sidechainGain = actx.createGain(); sidechainGain.gain.value = 1;
 
   gainNode = actx.createGain();
   gainNode.gain.value = +document.getElementById('vol').value;
@@ -1501,7 +1514,7 @@ function setup() {
   analyzer.fftSize = 512;
   analyzer.smoothingTimeConstant = 0.8;
 
-  src.connect(bassBoost);
+  // Wire up effects chain (no source yet — attached per-play)
   bassBoost.connect(distGainIn);
   distGainIn.connect(distNode);
   distNode.connect(distGainOut);
@@ -1523,13 +1536,169 @@ function setup() {
   sidechainGain.connect(gainNode);
   gainNode.connect(analyzer);
   analyzer.connect(actx.destination);
-
-  draw();
-  drawWave();
 }
 
+// ─── ATTACH SOURCE NODE ──────────────────────────────
+function attachSource(offsetSec) {
+  if (playbackNode) {
+    playbackNode.onended = null;
+    try { playbackNode.stop(); } catch(e){}
+    playbackNode.disconnect();
+  }
+  playbackNode = actx.createBufferSource();
+  playbackNode.buffer = rawBuffer;
+  playbackNode.playbackRate.value = playbackRate;
+  playbackNode.connect(bassBoost);
+  playbackNode.onended = onSourceEnded;
+  playbackNode.start(0, offsetSec);
+  startTime = actx.currentTime - offsetSec / playbackRate;
+}
+
+function onSourceEnded() {
+  if (!playing) return; // was stopped intentionally
+  pauseOffset = 0;
+  playing = false;
+  setUIState('stopped');
+  if (scInterval) clearInterval(scInterval);
+}
+
+// ─── PLAY / PAUSE ────────────────────────────────────
+function togglePlay() {
+  if (!rawBuffer) { alert('Загрузи трек!'); return; }
+  initCtx();
+  actx.resume().then(() => {
+    if (playing) {
+      // Pause: record position
+      pauseOffset = (actx.currentTime - startTime) * playbackRate;
+      if (playbackNode) { playbackNode.onended = null; try { playbackNode.stop(); } catch(e){} }
+      playing = false;
+      setUIState('paused');
+      if (scInterval) clearInterval(scInterval);
+    } else {
+      // Play from pauseOffset
+      const offset = Math.min(pauseOffset, rawBuffer.duration - 0.01);
+      attachSource(offset);
+      playing = true;
+      setUIState('playing');
+      if (fxEnabled.sidechain) restartSidechain();
+      updateSeekLoop();
+    }
+  });
+}
+
+function setUIState(state) {
+  const isPlaying = state === 'playing';
+  document.getElementById('playLabel').textContent = isPlaying ? 'PAUSE' : 'PLAY';
+  document.getElementById('playIcon').innerHTML = isPlaying
+    ? '<rect x="1" y="1" width="4" height="10"/><rect x="7" y="1" width="4" height="10"/>'
+    : '<polygon points="2,1 11,6 2,11"/>';
+  document.getElementById('pulseRing').style.display = isPlaying ? 'block' : 'none';
+  document.getElementById('p').classList.toggle('playing', isPlaying);
+  document.getElementById('statusDot').classList.toggle('active', isPlaying);
+  document.getElementById('statusText').textContent =
+    state === 'playing' ? 'PLAYING' : state === 'paused' ? 'PAUSED' : 'STOPPED';
+}
+
+// ─── SEEK LOOP ───────────────────────────────────────
+function updateSeekLoop() {
+  if (!playing || !rawBuffer || !actx) return;
+  const elapsed = (actx.currentTime - startTime) * playbackRate;
+  const clamped = Math.min(elapsed, rawBuffer.duration);
+  const pct = clamped / rawBuffer.duration;
+
+  const sb = document.getElementById('seekbar');
+  sb.max = rawBuffer.duration;
+  sb.value = clamped;
+  document.getElementById('curTime').textContent = fmt(clamped);
+  document.getElementById('durTime').textContent = fmt(rawBuffer.duration);
+  document.getElementById('seekPerc').textContent = Math.round(pct * 100) + '%';
+  drawPlayhead(pct);
+
+  requestAnimationFrame(updateSeekLoop);
+}
+
+// ─── SEEK (scrub) ────────────────────────────────────
+document.getElementById('seekbar').oninput = function() {
+  const t = +this.value;
+  pauseOffset = t;
+  if (playing && actx) {
+    if (playbackNode) { playbackNode.onended = null; try { playbackNode.stop(); } catch(e){} }
+    attachSource(t);
+    startTime = actx.currentTime - t / playbackRate;
+    updateSeekLoop();
+  } else {
+    drawPlayhead(rawBuffer ? t / rawBuffer.duration : 0);
+    document.getElementById('curTime').textContent = fmt(t);
+  }
+};
+
+function fmt(s) {
+  s = Math.max(0, s || 0);
+  const m = Math.floor(s / 60), sec = Math.floor(s % 60);
+  return m + ':' + (sec < 10 ? '0' : '') + sec;
+}
+
+// ─── FILE LOAD ───────────────────────────────────────
+document.getElementById('u').onchange = async (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  document.getElementById('statusText').textContent = 'LOADING\u2026';
+
+  // Stop any current playback
+  if (playing && playbackNode) {
+    playbackNode.onended = null;
+    try { playbackNode.stop(); } catch(ex){}
+    playing = false;
+  }
+  pauseOffset = 0;
+  setUIState('stopped');
+
+  // Decode into AudioBuffer (works entirely in memory, no blob/data URLs needed for playback)
+  const ab = await file.arrayBuffer();
+  // Re-use existing AudioContext or create one
+  if (!actx) {
+    actx = new (window.AudioContext || window.webkitAudioContext)();
+    document.getElementById('sampleRate').textContent = actx.sampleRate + ' Hz';
+    buildGraph();
+    draw();
+  }
+  rawBuffer = await actx.decodeAudioData(ab);
+
+  // Pre-fill metadata from filename
+  const nameParts = file.name.replace(/\.[^.]+$/, '').split(' - ');
+  if (nameParts.length >= 2) {
+    document.getElementById('metaArtist').value = nameParts[0].trim();
+    document.getElementById('metaTitle').value = nameParts.slice(1).join(' - ').trim();
+  } else {
+    document.getElementById('metaTitle').value = file.name.replace(/\.[^.]+$/, '');
+  }
+  document.getElementById('fileName').textContent = file.name.length > 24 ? file.name.slice(0, 22) + '\u2026' : file.name;
+  document.getElementById('dropZone').classList.add('loaded');
+  document.getElementById('statusText').textContent = 'READY';
+
+  // Update seekbar
+  const sb = document.getElementById('seekbar');
+  sb.max = rawBuffer.duration;
+  sb.value = 0;
+  document.getElementById('durTime').textContent = fmt(rawBuffer.duration);
+  document.getElementById('curTime').textContent = '0:00';
+  document.getElementById('seekPerc').textContent = '0%';
+
+  drawWaveformFromBuffer(rawBuffer);
+};
+
+// ─── SPEED / PITCH ───────────────────────────────────
+function updateSpeed(el) {
+  playbackRate = +el.value;
+  if (playbackNode) playbackNode.playbackRate.value = playbackRate;
+  document.getElementById('speedVal').textContent = Math.round(playbackRate * 100) + '%';
+}
+document.getElementById('pitchLock').onchange = function() {
+  pitchLockOn = this.checked;
+  document.getElementById('pitchLockVal').textContent = this.checked ? 'ON' : 'OFF';
+};
+
 // ─── SIDECHAIN ────────────────────────────────────────
-const SC_PATTERNS = ['4/4', '3/4', '2-step', 'Shuffle'];
 function updateSidechain() {
   const bpm = +document.getElementById('scBPM').value;
   const depth = +document.getElementById('scDepth').value;
@@ -1546,47 +1715,31 @@ function updateSidechain() {
 
 function restartSidechain() {
   if (scInterval) clearInterval(scInterval);
-  if (!fxEnabled.sidechain || !sidechainGain) return;
+  if (!fxEnabled.sidechain || !sidechainGain || !actx) return;
 
   const bpm = +document.getElementById('scBPM').value;
   const depth = +document.getElementById('scDepth').value;
-  const atk = +document.getElementById('scAtk').value;
   const rel = +document.getElementById('scRel').value;
   const pat = +document.getElementById('scPattern').value;
 
-  const patterns = [
-    [1,1,1,1],       // 4/4
-    [1,1,1],         // 3/4
-    [1,0,1,0],       // 2-step
-    [1,0,0,1,0,0,1,0] // shuffle
-  ];
+  const patterns = [[1,1,1,1],[1,1,1],[1,0,1,0],[1,0,0,1,0,0,1,0]];
   const seq = patterns[pat];
   let step = 0;
-
   const beatMs = (60 / bpm) * 1000;
 
   scInterval = setInterval(() => {
-    if (!sidechainGain || !fxEnabled.sidechain) return;
-    const hit = seq[step % seq.length];
-    if (hit) {
+    if (!sidechainGain || !fxEnabled.sidechain || !actx) return;
+    if (seq[step % seq.length]) {
       const now = actx.currentTime;
-      const minGain = 1 - depth;
       sidechainGain.gain.cancelScheduledValues(now);
-      sidechainGain.gain.setValueAtTime(minGain, now);
+      sidechainGain.gain.setValueAtTime(1 - depth, now);
       sidechainGain.gain.linearRampToValueAtTime(1, now + rel);
-      // Visual LED
       const led = document.getElementById('scTriggerLed');
       led.style.background = 'var(--green)';
       led.style.boxShadow = '0 0 8px var(--green)';
-      // Pump animation on card
       const card = document.getElementById('card-sidechain');
-      card.classList.remove('sidechain-pump');
-      void card.offsetWidth;
-      card.classList.add('sidechain-pump');
-      setTimeout(() => {
-        led.style.background = 'var(--dim)';
-        led.style.boxShadow = 'none';
-      }, Math.min(120, rel * 500));
+      card.classList.remove('sidechain-pump'); void card.offsetWidth; card.classList.add('sidechain-pump');
+      setTimeout(() => { led.style.background = 'var(--dim)'; led.style.boxShadow = 'none'; }, Math.min(120, rel * 500));
     }
     step++;
   }, beatMs);
@@ -1607,9 +1760,7 @@ function makeDistCurve(amount, type) {
 // ─── BITCRUSHER ──────────────────────────────────────
 function bitProcess(e) {
   if (!bitActive) {
-    for (let ch = 0; ch < 2; ch++) {
-      e.outputBuffer.getChannelData(ch).set(e.inputBuffer.getChannelData(ch));
-    }
+    for (let ch = 0; ch < 2; ch++) e.outputBuffer.getChannelData(ch).set(e.inputBuffer.getChannelData(ch));
     return;
   }
   const step = Math.pow(2, bitDepthVal);
@@ -1630,6 +1781,7 @@ function toggleFX(id) {
   if (fxEnabled[id]) card.classList.add('fx-active');
   else card.classList.remove('fx-active');
 
+  if (!actx) return;
   switch(id) {
     case 'bass': if (bassBoost) bassBoost.gain.value = fxEnabled.bass ? +document.getElementById('bass').value : 0; break;
     case 'filter': if (lowPass) lowPass.frequency.value = fxEnabled.filter ? +document.getElementById('f').value : 20000; break;
@@ -1677,7 +1829,7 @@ function updateDistCurve(el) {
   if (distNode && fxEnabled.dist) distNode.curve = makeDistCurve(+document.getElementById('distDrive').value, +el.value);
 }
 function updateReverb(param, el) {
-  if (param === 'size') { if (reverbDelay) reverbDelay.delayTime.value = el.value; document.getElementById('reverbSizeVal').textContent = el.value + 's'; }
+  if (param === 'size') { if (reverbDelay) reverbDelay.delayTime.value = el.value; document.getElementById('reverbSizeVal').textContent = el.value+'s'; }
   else { if (reverbWet && fxEnabled.reverb) reverbWet.gain.value = el.value; document.getElementById('reverbMixVal').textContent = Math.round(el.value*100)+'%'; }
 }
 function updateStereo(el) {
@@ -1709,126 +1861,6 @@ function updateVol(el) {
   if (gainNode) gainNode.gain.value = el.value;
   document.getElementById('volVal').textContent = Math.round(el.value/1.5*100)+'%';
 }
-function updateSpeed(el) {
-  audio.playbackRate = el.value;
-  audio.preservesPitch = document.getElementById('pitchLock').checked;
-  document.getElementById('speedVal').textContent = Math.round(el.value*100)+'%';
-}
-document.getElementById('pitchLock').onchange = function() {
-  audio.preservesPitch = this.checked;
-  document.getElementById('pitchLockVal').textContent = this.checked ? 'ON' : 'OFF';
-};
-
-// ─── PLAY / PAUSE ────────────────────────────────────
-function togglePlay() {
-  if (!rawBuffer) { alert('Загрузи трек!'); return; }
-  setup();
-  actx.resume();
-  if (playing) {
-    audio.pause(); playing = false;
-    document.getElementById('playLabel').textContent = 'PLAY';
-    document.getElementById('playIcon').innerHTML = '<polygon points="2,1 11,6 2,11"/>';
-    document.getElementById('pulseRing').style.display = 'none';
-    document.getElementById('p').classList.remove('playing');
-    document.getElementById('statusDot').classList.remove('active');
-    document.getElementById('statusText').textContent = 'PAUSED';
-    if (scInterval) clearInterval(scInterval);
-  } else {
-    audio.play().catch(err => {
-      console.warn('Play error:', err);
-      document.getElementById('statusText').textContent = 'ERROR';
-    });
-    playing = true;
-    document.getElementById('playLabel').textContent = 'PAUSE';
-    document.getElementById('playIcon').innerHTML = '<rect x="1" y="1" width="4" height="10"/><rect x="7" y="1" width="4" height="10"/>';
-    document.getElementById('pulseRing').style.display = 'block';
-    document.getElementById('p').classList.add('playing');
-    document.getElementById('statusDot').classList.add('active');
-    document.getElementById('statusText').textContent = 'PLAYING';
-    if (fxEnabled.sidechain) restartSidechain();
-  }
-}
-
-audio.onended = () => {
-  playing = false;
-  document.getElementById('playLabel').textContent = 'PLAY';
-  document.getElementById('playIcon').innerHTML = '<polygon points="2,1 11,6 2,11"/>';
-  document.getElementById('pulseRing').style.display = 'none';
-  document.getElementById('p').classList.remove('playing');
-  document.getElementById('statusDot').classList.remove('active');
-  document.getElementById('statusText').textContent = 'STOPPED';
-  if (scInterval) clearInterval(scInterval);
-};
-
-// ─── FILE LOAD ───────────────────────────────────────
-// Uses FileReader+base64 data URL to avoid blob: CSP restrictions on hosted environments
-document.getElementById('u').onchange = async (e) => {
-  const file = e.target.files[0];
-  if (!file) return;
-
-  document.getElementById('statusText').textContent = 'LOADING…';
-
-  // Decode audio buffer for waveform & offline export
-  const ab = await file.arrayBuffer();
-  const tmp = new (window.AudioContext || window.webkitAudioContext)();
-  rawBuffer = await tmp.decodeAudioData(ab.slice(0));
-  try { await tmp.close(); } catch(_){}
-
-  // Load audio element via base64 data URL (avoids blob: CSP issues on hosting)
-  const reader = new FileReader();
-  reader.onload = function(ev) {
-    audio.pause();
-    audio.removeAttribute('src');
-    audio.load();
-    // Reset audio graph so it rebuilds cleanly with new source
-    if (actx) {
-      try { actx.close(); } catch(ex){}
-      actx = null; src = null; gainNode = null; bassBoost = null; lowPass = null;
-      compressor = null; analyzer = null; makeupGain = null;
-      distNode = null; distGainIn = null; distGainOut = null;
-      reverbDelay = null; reverbFeedback = null; reverbDry = null; reverbWet = null;
-      stereoDelay = null; stereoMerger = null; stereoSplitter = null;
-      bitNode = null; sidechainGain = null;
-    }
-    audio.src = ev.target.result;
-    audio.load();
-    playing = false;
-    document.getElementById('playLabel').textContent = 'PLAY';
-    document.getElementById('playIcon').innerHTML = '<polygon points="2,1 11,6 2,11"/>';
-    document.getElementById('pulseRing').style.display = 'none';
-    document.getElementById('p').classList.remove('playing');
-    document.getElementById('statusDot').classList.remove('active');
-    document.getElementById('statusText').textContent = 'READY';
-  };
-  reader.onerror = () => { document.getElementById('statusText').textContent = 'ERROR'; };
-  reader.readAsDataURL(file);
-
-  // Pre-fill metadata from filename
-  const nameParts = file.name.replace(/\.[^.]+$/, '').split(' - ');
-  if (nameParts.length >= 2) {
-    document.getElementById('metaArtist').value = nameParts[0].trim();
-    document.getElementById('metaTitle').value = nameParts.slice(1).join(' - ').trim();
-  } else {
-    document.getElementById('metaTitle').value = file.name.replace(/\.[^.]+$/, '');
-  }
-  document.getElementById('fileName').textContent = file.name.length > 24 ? file.name.slice(0,22)+'…' : file.name;
-  document.getElementById('dropZone').classList.add('loaded');
-  drawWaveformFromBuffer(rawBuffer);
-};
-// ─── SEEK ────────────────────────────────────────────
-document.getElementById('seekbar').oninput = function() { audio.currentTime = this.value; };
-audio.ontimeupdate = () => {
-  if (!isNaN(audio.duration)) {
-    const sb = document.getElementById('seekbar');
-    sb.max = audio.duration;
-    sb.value = audio.currentTime;
-    document.getElementById('curTime').textContent = fmt(audio.currentTime);
-    document.getElementById('durTime').textContent = fmt(audio.duration);
-    document.getElementById('seekPerc').textContent = Math.round((audio.currentTime/audio.duration)*100)+'%';
-    drawPlayhead(audio.currentTime/audio.duration);
-  }
-};
-function fmt(s) { const m=Math.floor(s/60),sec=Math.floor(s%60); return m+':'+(sec<10?'0':'')+sec; }
 
 // ─── VISUALIZER ──────────────────────────────────────
 function draw() {
@@ -1856,7 +1888,7 @@ function draw() {
       cCtx.fillRect(2, y+0.5, barW, Math.max(1,barH-0.5));
     }
   } else {
-    const step = Math.floor(buf.length / cw);
+    const step = Math.floor(buf.length / cw) || 1;
     for (let x = 0; x < cw; x++) {
       let v = 0;
       for (let k = 0; k < step; k++) v = Math.max(v, buf[x*step+k]||0);
@@ -1882,7 +1914,7 @@ let waveformData = null, playhead = 0;
 
 function drawWaveformFromBuffer(buf) {
   const ch = buf.getChannelData(0);
-  const step = Math.floor(ch.length/800);
+  const step = Math.floor(ch.length/800) || 1;
   waveformData = [];
   for (let i = 0; i < 800; i++) {
     let max = 0;
@@ -1895,17 +1927,16 @@ function drawWaveformFromBuffer(buf) {
 function drawPlayhead(p) { playhead = p; drawWave(); }
 
 function drawWave() {
-  const w = waveCanvas.parentElement ? waveCanvas.parentElement.clientWidth - 40 || 300 : 300;
+  const w = (waveCanvas.parentElement ? waveCanvas.parentElement.clientWidth - 40 : 300) || 300;
   waveCanvas.width = w;
   waveCanvas.height = 50;
   wCtx.clearRect(0, 0, w, 50);
   if (!waveformData) return;
-  const step = waveformData.length/w;
+  const step = waveformData.length / w;
   for (let x = 0; x < w; x++) {
     const v = waveformData[Math.floor(x*step)]||0;
     const barH = v*44;
-    const played = x/w < playhead;
-    wCtx.fillStyle = played ? '#74fd62' : '#1a2a18';
+    wCtx.fillStyle = x/w < playhead ? '#74fd62' : '#1a2a18';
     wCtx.fillRect(x, 25-barH/2, 1, barH||1);
   }
   const px = playhead*w;
@@ -1934,8 +1965,7 @@ function loadCover(e) {
   reader.onload = function(ev) {
     coverDataUrl = ev.target.result;
     const img = document.getElementById('coverPreview');
-    img.src = coverDataUrl;
-    img.style.display = 'block';
+    img.src = coverDataUrl; img.style.display = 'block';
     const hint = document.querySelector('.cover-drop-hint');
     if (hint) hint.style.display = 'none';
     document.querySelector('.cover-drop > svg').style.display = 'none';
@@ -1952,7 +1982,7 @@ function selectFormat(fmt) {
 async function doExport() {
   const btn = document.getElementById('exportBtn');
   const lbl = document.getElementById('exportBtnLabel');
-  btn.disabled = true; lbl.textContent = 'РЕНДЕР…';
+  btn.disabled = true; lbl.textContent = 'РЕНДЕР\u2026';
 
   const rate = +document.getElementById('s').value;
   const outLen = Math.ceil(rawBuffer.length / rate);
@@ -1997,27 +2027,24 @@ async function doExport() {
   const oMakeup = offCtx.createGain();
   oMakeup.gain.value = Math.pow(10, +document.getElementById('compMakeup').value/20);
 
-  // Sidechain pump in offline context
   const oScGain = offCtx.createGain();
   if (fxEnabled.sidechain) {
     const scBPM = +document.getElementById('scBPM').value;
     const scDepth = +document.getElementById('scDepth').value;
-    const scAtk = +document.getElementById('scAtk').value;
     const scRel = +document.getElementById('scRel').value;
     const scPat = +document.getElementById('scPattern').value;
     const patterns = [[1,1,1,1],[1,1,1],[1,0,1,0],[1,0,0,1,0,0,1,0]];
     const seq = patterns[scPat];
     const beatSec = 60/scBPM;
-    const totalBeats = Math.ceil(outLen / rawBuffer.sampleRate / beatSec) + 4;
+    const totalBeats = Math.ceil(rawBuffer.duration / beatSec) + 4;
+    oScGain.gain.setValueAtTime(1, 0);
     for (let i = 0; i < totalBeats; i++) {
-      const beat = seq[i % seq.length];
-      if (beat) {
-        const t = i * beatSec;
-        oScGain.gain.setValueAtTime(1-scDepth, t);
-        oScGain.gain.linearRampToValueAtTime(1, t+scRel);
+      if (seq[i % seq.length]) {
+        const t = i * beatSec / rate;
+        oScGain.gain.setValueAtTime(1 - scDepth, t);
+        oScGain.gain.linearRampToValueAtTime(1, t + scRel);
       }
     }
-    oScGain.gain.setValueAtTime(1, 0);
   } else {
     oScGain.gain.value = 1;
   }
@@ -2037,9 +2064,8 @@ async function doExport() {
 
   const title = document.getElementById('metaTitle').value || 'zer01_processed';
   const artist = document.getElementById('metaArtist').value || '@AloneAbove';
-  const fname = (artist ? artist.replace(/[^a-z0-9а-яё _-]/gi,'') + ' - ' : '') + (title.replace(/[^a-z0-9а-яё _-]/gi,'') || 'track');
+  const fname = (artist.replace(/[^a-z0-9а-яёА-ЯЁ _-]/gi,'') + ' - ' + title.replace(/[^a-z0-9а-яёА-ЯЁ _-]/gi,'')) || 'track';
 
-  // Write WAV with ID3-lite (artist/title in comment chunk)
   const nCh = rendered.numberOfChannels;
   const len = rendered.length * nCh * 2 + 44;
   const out = new ArrayBuffer(len);
